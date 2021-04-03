@@ -36,6 +36,7 @@ Create a build folder: **..../Pico/uSDR-pico/build**
 
 In **..../Pico** there is a script to start a Developer Command Prompt
 At this DCP go inside the build folder and execute: **cmake -G "NMake Makefiles" ..**
+
 Now you have initialized the make environment, and by executing **nmake** the Pi Pico loadable file **uSDR.uf2** is created
 Rebooting the Pico with the bootsel button pressed will open a file explorer window into which this file can be dropped
 
