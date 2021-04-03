@@ -29,6 +29,7 @@ Open issues:
 - implement the user I/O bit
 
 Installing and using the SDK for Windows:
+
 Please refer to https://github.com/ndabas/pico-setup-windows  where an installer script can be downloaded.
 Execute the script to set up the SDK environment, e.g. in **$user/Documents/Pico**
 Then clone the code files into a subdirectory, e.g. **..../Pico/uSDR-pico**
