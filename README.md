@@ -28,3 +28,14 @@ Open issues:
 - add some more filtering 
 - implement the user I/O bit
 
+Installing and using the SDK for Windows:
+Please refer to https://github.com/ndabas/pico-setup-windows  where an installer script can be downloaded.
+Execute the script to set up the SDK environment, e.g. in **$user/Documents/Pico**
+Then clone the code files into a subdirectory, e.g. **..../Pico/uSDR-pico**
+Create a build folder: **..../Pico/uSDR-pico/build**
+
+In **..../Pico** there is a script to start a Developer Command Prompt
+At this DCP go inside the build folder and execute: **cmake -G "NMake Makefiles" ..**
+Now you have initialized the make environment, and by executing **nmake** the Pi Pico loadable file **uSDR.uf2** is created
+Rebooting the Pico with the bootsel button pressed will open a file explorer window into which this file can be dropped
+
