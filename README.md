@@ -28,6 +28,7 @@ Open issues:
 - add some more filtering 
 - implement the user I/O bit
 
+
 Installing and using the SDK for Windows:
 
 Please refer to https://github.com/ndabas/pico-setup-windows  where an installer script can be downloaded.
