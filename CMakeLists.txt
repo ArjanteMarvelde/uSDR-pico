@@ -19,7 +19,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(uSDR uSDR.c lcd.c si5351.c dsp.c)
+add_executable(uSDR uSDR.c lcd.c si5351.c dsp.c monitor.c)
 
 pico_set_program_name(uSDR "uSDR")
 pico_set_program_version(uSDR "0.1")
@@ -31,9 +31,12 @@ target_link_libraries(uSDR pico_stdlib)
 pico_enable_stdio_uart(uSDR 0)
 pico_enable_stdio_usb(uSDR 1)
 
+
 # Add any user requested libraries
 target_link_libraries(uSDR
-        hardware_i2c
+        pico_stdlib
+		pico_multicore
+		hardware_i2c
 		hardware_pwm
         hardware_pio
         hardware_timer

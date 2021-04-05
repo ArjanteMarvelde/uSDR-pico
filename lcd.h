@@ -1,5 +1,13 @@
 #ifndef __LCD_H__
 #define __LCD_H__
+/* 
+ * lcd.h
+ *
+ * Created: Mar 2021
+ * Author: Arjan te Marvelde
+ *
+ * See lcd.c for more information 
+ */
 
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"

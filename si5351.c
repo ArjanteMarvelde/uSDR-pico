@@ -1,8 +1,8 @@
 /*
  * si5351.c
  *
- * Created: 12 Jan 2020 21:45:00
- *  Author: Arjan
+ * Created: Jan 2020
+ * Author: Arjan
  
 Si5351 principle:
 =================
@@ -117,21 +117,6 @@ Control Si5351:
 
  */ 
 
-/*
-  Implicit type conversion precedence:
-  - long double
-  - double
-  - float
-  - unsigned long int
-  - long int
-  - unsigned int
-  - int
-  - other
-  conversion is always to highest type, this is also the result of an operation.
-  
-  Maximum UL = 4,294,967,295 (0xffffffff)
- */
-
 #include <stdio.h>
 #include <math.h>
 #include "pico/stdlib.h"
@@ -190,6 +175,7 @@ Control Si5351:
 
 vfo_t vfo[2];				// 0: clk0 and clk1     1: clk2
 
+/* read contents of SI5351 registers, from reg to reg+len-1, output in data array */
 int si_getreg(uint8_t *data, uint8_t reg, uint8_t len)
 {
 	int ret;
@@ -304,7 +290,7 @@ void si_setmsi(uint8_t i)
 // If in range, just set MSN registers
 // If not in range, recalculate MSi and Ri and also MSN
 // Set MSN, MSi and Ri registers (implicitly resets PLL)
-void vfo_evaluate(void)
+void si_evaluate(void)
 {
 	float msn;
 
@@ -342,7 +328,7 @@ void vfo_evaluate(void)
 
 
 // Initialize the Si5351 VFO registers
-void vfo_init(void)
+void si_init(void)
 {
 	uint8_t data[16];		// I2C trx buffer
 
@@ -358,7 +344,7 @@ void vfo_init(void)
 	// MSN=27.2   P1=2969, P2=600000, P3=1000000
 	vfo[0].freq  = 10000000;
 	vfo[0].flag  = 0;
-	vfo[0].phase = 2;
+	vfo[0].phase = 1;
 	vfo[0].ri    = 1;
 	vfo[0].msi   = 68;
 	vfo[0].msn   = 27.2;
@@ -434,6 +420,5 @@ void vfo_init(void)
 	data[0] = SI_CLK_OE;
 	data[1] = 0x00;
 	i2c_write_blocking(i2c1, I2C_VFO, data, 2, false);
-
 }
 

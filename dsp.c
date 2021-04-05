@@ -2,11 +2,12 @@
  * dsp.c
  *
  * Created: Mar 2021
- * Author: Arjan
+ * Author: Arjan te Marvelde
  * 
- * Signal processing of RX and TX branch
- * Each branch has a dedicated timer routine that runs on set times.
- * The callback period is set with RX_US and TX_US, e.g. 16 means every 16 usec, or 62.5 kHz.
+ * Signal processing of RX and TX branch, to be run on the second processor core.
+ * Each branch has a dedicated routine that must run on set times.
+ * The period is determined by reads from the inter-core fifo, by the dsp_loop() routine. 
+ * This fifo is written from core0 from a 16us timer callback routine (i.e. 62.5kHz)
  *
  * The RX branch:
  * - Sample I and Q QSD channels intermittently, and shift into I and Q delay line (31.25 kHz per channel)
@@ -19,7 +20,7 @@
  *
  * The TX branch:
  * - Sample the Audio input channel (62.5 kHz)
- * - Low pass filter: Fc=4kHz
+ * - Low pass filter: Fc=3kHz
  * - Eight rate (7.8125 kHz) to improve low F behavior of Hilbert transform
  * - Generate Q samples by doing a Hilbert transform
  * - Push I and Q to QSE output DACs
@@ -27,8 +28,12 @@
  */
 
 #include "pico/stdlib.h"
+#include "pico/multicore.h"
 #include "hardware/pwm.h"
 #include "hardware/adc.h"
+#include "hardware/irq.h"
+#include "hardware/timer.h"
+#include "hardware/clocks.h"
 
 #include "dsp.h"
 
@@ -65,8 +70,10 @@ uint16_t wave4[64] =
  * Exact time is obtained by passing the value negative.
  * Here we use 16us (62.5 kHz == PWM freq/4 [or 8]) 
  */
-#define RX_US		16
-#define TX_US		16
+#define DSP_US		16
+#define DSP_TX		1
+#define DSP_RX		2
+
 
 /* 
  * Low pass filters Fc=3, 7 and 15 kHz (see http://t-filter.engineerjs.com/)
@@ -84,19 +91,16 @@ volatile uint16_t dac_iq, dac_audio;
 volatile bool tx_enabled;
 
 
-/* RX TIMER and callback */
+/* CORE1: RX branch */
 volatile int16_t i_s[15], q_s[15], i_dc, q_dc, i_prev;
-struct repeating_timer rx_timer;
-bool rx_callback(struct repeating_timer *t) 
+bool rx(void) 
 {
 	static bool q_phase;
 	int16_t sample;
 	int32_t accu;
 	int16_t qh;
 	int i;
-	
-	if (tx_enabled) return(true);					// Early bailout when TX-ing
-	
+		
 	if (q_phase)
 	{
 		adc_select_input(1);						// Q channel ADC 
@@ -170,19 +174,16 @@ bool rx_callback(struct repeating_timer *t)
 }
 
 
-/* TX TIMER and callback */
+/* CORE1: TX branch */
 volatile int16_t a_s_pre[15], a_s[15], a_dc;
-struct repeating_timer tx_timer;
-bool tx_callback(struct repeating_timer *t) 
+bool tx(void) 
 {
 	static int tx_phase = 0;
 	int16_t sample;
 	int32_t accu;
 	int16_t qh;
 	int i;
-	
-	if (!tx_enabled) return(true);
-	
+		
 	/*
 	 * Get sample and shift into delay line
 	 */
@@ -233,7 +234,37 @@ bool tx_callback(struct repeating_timer *t)
 }
 
 
-int dsp_init()
+/* CORE1: Timing loop, triggered through inter-core fifo */
+void dsp_loop()
+{
+	uint32_t cmd;
+	
+    while(1) 
+	{
+        cmd = multicore_fifo_pop_blocking();		// Wait for fifo output
+		if (cmd == DSP_TX)
+			tx();
+		else
+			rx();
+    }
+}
+
+
+/* CORE0: Timer callback, triggers core1 through inter-core fifo */
+struct repeating_timer dsp_timer;
+bool dsp_callback(struct repeating_timer *t) 
+{
+	//if (tx_enabled)
+		multicore_fifo_push_blocking(DSP_TX);		// Write TX in fifo to core 1
+	//else
+		multicore_fifo_push_blocking(DSP_RX);		// Write RX in fifo to core 1
+	
+	return true;
+}
+
+
+/* CORE0: Initialize dsp context and spawn core1 process */
+void dsp_init() 
 {
 	uint16_t slice_num;
 	
@@ -259,9 +290,8 @@ int dsp_init()
 	adc_select_input(0);							// Select ADC 0 
 
 	tx_enabled = false;								// RX mode
-		
-	//add_repeating_timer_us(-TX_US, tx_callback, NULL, &tx_timer);
-	add_repeating_timer_us(-RX_US, rx_callback, NULL, &rx_timer);
 
-    return 0;
+    multicore_launch_core1(dsp_loop);				// Start processing on core1
+	add_repeating_timer_us(-DSP_US, dsp_callback, NULL, &dsp_timer);
 }
+

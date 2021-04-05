@@ -1,4 +1,9 @@
 /*
+ * lcd.c
+ *
+ * Created: Mar 2021
+ * Author: Arjan te Marvelde
+ * 
  * Grove 16x2 LCD, HD44780 chip with JHD1804 I2C interface
  * Display RAM addresses 0x00-0x1f for top row and 0x40-0x5f for bottom row
  *
