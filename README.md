@@ -43,6 +43,7 @@ Now you have initialized the make environment, and by executing **nmake** in tha
 Rebooting the Pico while the bootsel button is pressed will open a file explorer window with the Pico as a Mass Storage Device. Moving the binary to the Pico is as easy as dragging and dropping this uf2 file into that MSD.  
 
 # Background
+The folder **$PICO/docs** also contains some manuals, of which the *C-SDK description*, the *RP2040 datasheet* and the *Pico Pinout* are absolute must-reads when you start writing software.  
 For calculating filters I have used the free software from Iowa Hills (http://www.iowahills.com/8DownloadPage.html)  
 I also used the online FIR filter calculator T-Filter (http://t-filter.engineerjs.com/) 
 
