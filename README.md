@@ -29,16 +29,19 @@ Open issues:
 - implement the user I/O bit
 
 
-Installing and using the SDK for Windows:
+>>Installing and using the SDK for Windows:
 
-Please refer to https://github.com/ndabas/pico-setup-windows  where an installer script can be downloaded.  
-Execute the script to set up the SDK environment, e.g. in **$user/Documents/Pico**  
-Then clone the code files into a subdirectory, e.g. **..../Pico/uSDR-pico**  
-Create a build folder: **..../Pico/uSDR-pico/build**  
+Please refer to https://github.com/ndabas/pico-setup-windows/releases where the latest installer can be downloaded (e.g. **pico-setup-windows-0.3-x64.exe**).  
+Execute the installer to set up the SDK environment, e.g. in **~/Documents/Pico**  (let's call this folder $PICO). 
 
-In **..../Pico** there is a script to start a Developer Command Prompt.  
-At this DCP go inside the build folder and execute: **cmake -G "NMake Makefiles" ..**
+>> Building uSDR-pico:
 
-Now you have initialized the make environment, and by executing **nmake** the Pi Pico loadable file **uSDR.uf2** is created.  
-Rebooting the Pico with the bootsel button pressed will open a file explorer window into which this file can be dropped.  
+Clone/copy the uSDR-pico code files into a subdirectory, e.g. **$PICO/uSDR-pico**  
+Create the build folder: **$PICO/uSDR-pico/build**  
+
+Before doing any building you need to adapt the file **$PICO/uSDR-pico/CMakeLists.txt**, using your favourite browser, to reflect your own directory structure. 
+In **$PICO/** you will find a command to start a Developer Command Prompt window. Within this DCP all environment settings are initialized to enable building.
+In the DCP window, chdir to the build folder and execute: **cmake -G "NMake Makefiles" ..**
+Now you have initialized the make environment, and by executing **nmake** in that same build folder, the Pi Pico loadable file **uSDR.uf2** is created.  
+Rebooting the Pico while the bootsel button is pressed will open a file explorer window with the Pico as a Mass Storage Device. Moving the binary to the Pico is as easy as dragging and dropping this uf2 file into that MSD.  
 
