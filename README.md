@@ -24,9 +24,10 @@ The Pico controls an Si5351A clock module to obtain the switching clock for the 
 The display is a standard 16x2 LCD, but with an I2C interface. The display is connected through the **i2c1** channel.
 
 ## Open issues: 
-- take care of processing cycles, by moving parts to the second core
-- add some more filtering 
-- implement the user I/O bit
+- [x] take care of processing cycles, by moving signal processing parts to the second core
+- [ ] add some more filtering 
+- [ ] implement the user I/O bit: LCD+Rotary encoder+buttons
+- [ ] sort out the surrounding HW
 
 ## Installing and using the SDK for Windows: 
 Please refer to https://github.com/ndabas/pico-setup-windows/releases where the latest installer can be downloaded (e.g. **pico-setup-windows-0.3-x64.exe**).  
