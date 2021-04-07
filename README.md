@@ -23,19 +23,17 @@ The main loop takes care of user I/O and the serial port. There is also a LED fl
 The Pico controls an Si5351A clock module to obtain the switching clock for the QSE and QSD. The module outputs two synchronous square wave clocks on ch 0 and 1, whith selectable phase difference (0, 90, 180 or 270 degrees). The clock on ch2 is free to be used for other goals. The module is controlled over the **i2c0** channel.
 The display is a standard 16x2 LCD, but with an I2C interface. The display is connected through the **i2c1** channel.
 
-Open issues:
+> Open issues: 
 - take care of processing cycles, by moving parts to the second core
 - add some more filtering 
 - implement the user I/O bit
 
 
->>Installing and using the SDK for Windows:
-
+> Installing and using the SDK for Windows: 
 Please refer to https://github.com/ndabas/pico-setup-windows/releases where the latest installer can be downloaded (e.g. **pico-setup-windows-0.3-x64.exe**).  
 Execute the installer to set up the SDK environment, e.g. in **~/Documents/Pico**  (let's call this folder $PICO). 
 
->> Building uSDR-pico:
-
+> Building uSDR-pico: 
 Clone/copy the uSDR-pico code files into a subdirectory, e.g. **$PICO/uSDR-pico**  
 Create the build folder: **$PICO/uSDR-pico/build**  
 
