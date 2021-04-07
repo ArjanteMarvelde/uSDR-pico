@@ -6,6 +6,7 @@
  * 
  * Grove 16x2 LCD, HD44780 chip with JHD1804 I2C interface
  * Display RAM addresses 0x00-0x1f for top row and 0x40-0x5f for bottom row
+ * Character Generator addresses are 0x00-0x07
  *
  */
 #include <stdio.h>
@@ -101,11 +102,19 @@ void lcd_ctrl(uint8_t cmd, uint8_t x, uint8_t y)
 		i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
 		sleep_us(39);
 		break;
+	case LCD_CURSOR:
+		if (x==1)
+			txdata[1] = 0x0e;
+		else
+			txdata[1] = 0x0c;
+		i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+		sleep_us(39);
+		break;
 	case LCD_GOTO: 					// 2-row is 0x00-0x27 per row, only 0x00-0x1F are visible
 		if (y==1)
-			txdata[1] = x | 0xc0;
+			txdata[1] = (x&0x0f) | 0xc0;
 		else
-			txdata[1] = x | 0x80;
+			txdata[1] = (x&0x0f) | 0x80;
 		i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
 		sleep_us(39);
 		break;
@@ -126,5 +135,22 @@ void lcd_write(uint8_t *s, uint8_t len)
 		i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
 		sleep_us(43);
 	}
-		
+}
+
+void lcd_test(void)
+{
+	uint8_t chr[16];
+	int i, j;
+	
+	lcd_ctrl(LCD_CLEAR,0,0);
+	for (i=0; i<16; i++)
+	{
+		for(j=0; j<16; j++) chr[j] = (uint8_t)(16*i+j);
+		lcd_ctrl(LCD_GOTO,0,0);
+		lcd_write(chr, 16);
+		sleep_ms(800);
+		lcd_ctrl(LCD_GOTO,0,1);
+		lcd_write(chr, 16);
+	}
+	lcd_ctrl(LCD_CLEAR,0,0);
 }

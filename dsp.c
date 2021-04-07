@@ -64,6 +64,7 @@ uint16_t wave4[64] =
  */
 #define DAC_RANGE	250
 #define ADC_RANGE	4096
+#define ADC_BIAS	ADC_RANGE/2
 
 /* 
  * Callback timeout, determines frequency of TX and RX loops
@@ -104,7 +105,7 @@ bool rx(void)
 	if (q_phase)
 	{
 		adc_select_input(1);						// Q channel ADC 
-		sample = (int16_t)adc_read() - ADC_RANGE/2;
+		sample = (int16_t)adc_read() - ADC_BIAS;	// Take sample and subtract mid-level
 		
 		/* 
 		 * Shift Q samples 
@@ -126,7 +127,7 @@ bool rx(void)
 	else
 	{
 		adc_select_input(0);						// I channel ADC 
-		sample = (int16_t)adc_read() - ADC_RANGE/2;
+		sample = (int16_t)adc_read() - ADC_BIAS;	// Take sample and subtract mid-level
 		
 		/* 
 		 * Shift I samples
@@ -143,7 +144,7 @@ bool rx(void)
 //		i_s[14] = sample - i_dc;					// Calculate output
 //		i_dc = sample;								// Store new i_dc
 //		sample = i_s[14];							// Get out uncorrected sample
-		i_s[14] = (sample + i_prev)/2;				// Correct phase difference with Q channel
+		i_s[14] = (sample + i_prev)/2;				// Correct for phase difference with Q samples
 		i_prev = sample;							// Remember last sample for next I-phase
 
 		/* 
@@ -164,7 +165,7 @@ bool rx(void)
 		 * Range should be within DAC_RANGE
 		 * Add 250 offset and send to audio DAC output
 		 */
-		sample = (i_s[7] - qh)/32;
+		sample = (i_s[7] - qh)/16;
 		pwm_set_chan_level(dac_audio, PWM_CHAN_A, DAC_RANGE/2 + sample);
 	
 		q_phase = true;								// Next: Q branch
@@ -254,9 +255,9 @@ void dsp_loop()
 struct repeating_timer dsp_timer;
 bool dsp_callback(struct repeating_timer *t) 
 {
-	//if (tx_enabled)
+	if (tx_enabled)
 		multicore_fifo_push_blocking(DSP_TX);		// Write TX in fifo to core 1
-	//else
+	else
 		multicore_fifo_push_blocking(DSP_RX);		// Write RX in fifo to core 1
 	
 	return true;
@@ -269,12 +270,12 @@ void dsp_init()
 	uint16_t slice_num;
 	
 	/* Initialize DACs */
-	gpio_set_function(0, GPIO_FUNC_PWM);			// GP0 is PWM for I DAC (Slice 0, Channel A)
-	gpio_set_function(1, GPIO_FUNC_PWM);			// GP1 is PWM for Q DAC (Slice 0, Channel B)
-	dac_iq = pwm_gpio_to_slice_num(0);				// Get PWM slice for GP0 (Same for GP1)
-	pwm_set_clkdiv_int_frac (dac_iq, 1, 0);			// clock divide by 1
-	pwm_set_wrap(dac_iq, DAC_RANGE);				// Set cycle length
-	pwm_set_enabled(dac_iq, true); 					// Set the PWM running
+//	gpio_set_function(0, GPIO_FUNC_PWM);			// GP0 is PWM for I DAC (Slice 0, Channel A)
+//	gpio_set_function(1, GPIO_FUNC_PWM);			// GP1 is PWM for Q DAC (Slice 0, Channel B)
+//	dac_iq = pwm_gpio_to_slice_num(0);				// Get PWM slice for GP0 (Same for GP1)
+//	pwm_set_clkdiv_int_frac (dac_iq, 1, 0);			// clock divide by 1
+//	pwm_set_wrap(dac_iq, DAC_RANGE);				// Set cycle length
+//	pwm_set_enabled(dac_iq, true); 					// Set the PWM running
 	
 	gpio_set_function(2, GPIO_FUNC_PWM);			// GP2 is PWM for Audio DAC (Slice 1, Channel A)
 	dac_audio = pwm_gpio_to_slice_num(2);			// Find PWM slice for GP2

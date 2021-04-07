@@ -12,6 +12,7 @@
 #include <string.h>
 #include "pico/stdlib.h"
 
+#include "lcd.h"
 #include "si5351.h"
 #include "monitor.h"
 
@@ -29,16 +30,16 @@ uint8_t si5351_reg[200];
 
 /* Commandstring parser */
 char delim[] = " ";
-#define NCMD	3
-char *shell[NCMD] = {"si", "fa", "fb"};
+#define NCMD	4
+char shell[NCMD][3] = {"si", "lt", "fb", "xx"};
 void mon_parse(char* s)
 {
 	char *p;
 	int base, nreg, i;
 
-	p = strtok(s, delim); 							// Get command part of string
+	p = s; //strtok(s, delim); 							// Get command part of string
 	for (i=0; i<NCMD; i++)
-		if (strcmp(p, shell[i]) == 0) break;
+		if (strncmp(p, shell[i], 2) == 0) break;
 	switch(i)
 	{
 	case 0:
@@ -50,11 +51,14 @@ void mon_parse(char* s)
 		break;
 	case 1:
 		printf("%s\n", p);
+		lcd_test();
 		break;
 	case 2:
+	case 3:
 		printf("%s\n", p);
 		break;
 	default:
+		printf("??\n");
 		break;
 	}
 }
@@ -77,7 +81,7 @@ void mon_read(uint32_t timeout)
 	case LF:										// 		need to parse command string
 		putchar((char)c);							// echo character
 		if (i==0) break;							// already did a parse, only do it once
-		mon_cmd[i] = 0;								// terminate command string
+		mon_cmd[i] = '\0';							// terminate command string
 		i=0;										// reset index
 		mon_parse(mon_cmd);							// process command
 		printf("Pico> ");							// prompt
