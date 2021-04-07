@@ -36,13 +36,13 @@ Execute the installer to set up the SDK environment, e.g. in **~/Documents/Pico*
 Clone/copy the uSDR-pico code files into a subdirectory, e.g. **$PICO/uSDR-pico**  
 Create the build folder: **$PICO/uSDR-pico/build**  
 
-Before doing any building you need to adapt the file **$PICO/uSDR-pico/CMakeLists.txt**, using your favourite browser, to reflect your own directory structure. 
-In **$PICO/** you will find a command to start a Developer Command Prompt window. Within this DCP all environment settings are initialized to enable building.
-In the DCP window, chdir to the build folder and execute: **cmake -G "NMake Makefiles" ..**
+Before doing any building you need to adapt the file **$PICO/uSDR-pico/CMakeLists.txt**, using your favourite browser, to reflect your own directory structure.  
+In **$PICO/** you will find a command to start a Developer Command Prompt window. Within this DCP all environment settings are initialized to enable building.  
+In the DCP window, chdir to the build folder and execute: **cmake -G "NMake Makefiles" ..**  
 Now you have initialized the make environment, and by executing **nmake** in that same build folder, the Pi Pico loadable file **uSDR.uf2** is created.  
 Rebooting the Pico while the bootsel button is pressed will open a file explorer window with the Pico as a Mass Storage Device. Moving the binary to the Pico is as easy as dragging and dropping this uf2 file into that MSD.  
 
 # Background
-For calculating filters I have used the free software from Iowa Hills (http://www.iowahills.com/8DownloadPage.html)
-I also used the online FIR filter calculator T-Filter (http://t-filter.engineerjs.com/)
+For calculating filters I have used the free software from Iowa Hills (http://www.iowahills.com/8DownloadPage.html)  
+I also used the online FIR filter calculator T-Filter (http://t-filter.engineerjs.com/) 
 
