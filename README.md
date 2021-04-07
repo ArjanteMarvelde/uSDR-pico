@@ -3,7 +3,7 @@ uSDR implementation based on a RP2040 Pi Pico
 
 This is the repository for an experimental implementation of the control and signal processing for a QSD/QSE based transceiver. The platform used is a Pi Pico module with an RP2040 processor. This processor has dual core, running at 125MHz each and very configurable I/O which eases the HW design.
 
-The software consists of a TX branch and an RX branch, each running inside a timer callback function, once every 16 usec. This makes the signal processing rythm 62.5kHz. 
+The software consists of a TX branch and an RX branch, each running inside a timer callback function, once every 16 usec. This makes the signal processing rythm 62.5kHz.  
 The TX branch 
 - samples audio input with ADC2 (rate = 62.5 kHz), 
 - applies a low-pass filter Fc=3kHz, 
