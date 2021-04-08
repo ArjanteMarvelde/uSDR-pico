@@ -20,7 +20,8 @@
 
 void lcd_init(void);
 void lcd_ctrl(uint8_t cmd, uint8_t x, uint8_t y);
-void lcd_write(uint8_t *s, uint8_t len);
+void lcd_put(uint8_t c);
+void lcd_write(uint8_t *s);
 void lcd_test(void);
 
 

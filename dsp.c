@@ -37,24 +37,6 @@
 
 #include "dsp.h"
 
-/* Test sine waves 1, 2 and 4 kHz (@ 62.5kS/s rate) *
-uint16_t wave1[64] = 
-{
-500,549,597,645,691,735,777,817,853,886,915,940,961,978,990,997,999,997,990,978,961,940,915,886,853,817,777,735,691,645,597,549,
-500,450,402,354,308,264,222,182,146,113,84,59,38,21,9,2,0,2,9,21,38,59,84,113,146,182,222,264,308,354,402,450
-};
-uint16_t wave2[64] = 
-{
-500,597,691,777,853,915,961,990,999,990,961,915,853,777,691,597,500,402,308,222,146,84,38,9,0,9,38,84,146,222,308,402,
-500,597,691,777,853,915,961,990,999,990,961,915,853,777,691,597,500,402,308,222,146,84,38,9,0,9,38,84,146,222,308,402
-};
-uint16_t wave4[64] = 
-{
-500,691,853,961,999,961,853,691,500,308,146,38,0,38,146,308,500,691,853,961,999,961,853,691,500,308,146,38,0,38,146,308,
-500,691,853,961,999,961,853,691,500,308,146,38,0,38,146,308,500,691,853,961,999,961,853,691,500,308,146,38,0,38,146,308
-};
-*/
-
 /* 
  * DAC_RANGE defines PWM cycle, determining DAC resolution and PWM frequency.
  * DAC resolution = Vcc / DAC_RANGE
@@ -63,12 +45,14 @@ uint16_t wave4[64] =
  * ADC is 12 bit, so resolution is by definition 4096
  */
 #define DAC_RANGE	250
+#define DAC_BIAS	DAC_RANGE/2
 #define ADC_RANGE	4096
 #define ADC_BIAS	ADC_RANGE/2
 
 /* 
- * Callback timeout, determines frequency of TX and RX loops
- * Exact time is obtained by passing the value negative.
+ * Callback timeout and inter-core FIFO commands. 
+ * The timer value in usec determines frequency of TX and RX loops
+ * Exact time is obtained by passing the value as negative
  * Here we use 16us (62.5 kHz == PWM freq/4 [or 8]) 
  */
 #define DSP_US		16
@@ -78,7 +62,7 @@ uint16_t wave4[64] =
 
 /* 
  * Low pass filters Fc=3, 7 and 15 kHz (see http://t-filter.engineerjs.com/)
- * for sample rates 62.500 , 31.250 or 15.625 kHz , stopband appr -40dB
+ * for sample rates 62.500 , 31.250 or 15.625 kHz , stopband is appr -40dB
  * 8 bit precision, so divide sum by 256 
  */
 int16_t lpf3_62[15] =  {  3,  3,  5,  7,  9, 10, 11, 11, 11, 10,  9,  7,  5,  3,  3};	// Pass: 0-3000, Stop: 6000-31250
@@ -92,7 +76,10 @@ volatile uint16_t dac_iq, dac_audio;
 volatile bool tx_enabled;
 
 
-/* CORE1: RX branch */
+/* 
+ * CORE1: 
+ * Execute RX branch signal processing
+ */
 volatile int16_t i_s[15], q_s[15], i_dc, q_dc, i_prev;
 bool rx(void) 
 {
@@ -148,13 +135,6 @@ bool rx(void)
 		i_prev = sample;							// Remember last sample for next I-phase
 
 		/* 
-		 * Hilbert transform: A0 = 2/128, A2 = 8/128, A4 = 21/128, A6 = 79/128
-		 */	
-//		qh = (q_s[0]-q_s[14])/64 +
-//			 (q_s[2]-q_s[12])/16 +
-//			 (q_s[4]-q_s[10])/8 + (q_s[4]-q_s[10])*5/128 +
-//			 (q_s[6]-q_s[ 8])/8 - (q_s[6]-q_s[8])/128 + (q_s[6]-q_s[8])/2;
-		/* 
 		 * Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills):
 		 */	
 		accu = (q_s[0]-q_s[14])*315L + (q_s[2]-q_s[12])*440L + (q_s[4]-q_s[10])*734L + (q_s[6]-q_s[ 8])*2202L;
@@ -166,7 +146,7 @@ bool rx(void)
 		 * Add 250 offset and send to audio DAC output
 		 */
 		sample = (i_s[7] - qh)/16;
-		pwm_set_chan_level(dac_audio, PWM_CHAN_A, DAC_RANGE/2 + sample);
+		pwm_set_chan_level(dac_audio, PWM_CHAN_A, DAC_BIAS + sample);
 	
 		q_phase = true;								// Next: Q branch
 	}
@@ -175,7 +155,10 @@ bool rx(void)
 }
 
 
-/* CORE1: TX branch */
+/* 
+ * CORE1: 
+ * Execute TX branch signal processing
+ */
 volatile int16_t a_s_pre[15], a_s[15], a_dc;
 bool tx(void) 
 {
@@ -228,14 +211,17 @@ bool tx(void)
 	 * Write I and Q to QSE DACs, phase is 7 back.
 	 * Need to multiply AC with DAC_RANGE/ADC_RANGE (appr 1/16, but compensate for losses)
 	 */
-	pwm_set_chan_level(dac_iq, PWM_CHAN_A, DAC_RANGE/2 + (a_s[7]/8));
-	pwm_set_chan_level(dac_iq, PWM_CHAN_B, DAC_RANGE/2 + (qh/8));
+	pwm_set_chan_level(dac_iq, PWM_CHAN_A, DAC_BIAS + (a_s[7]/8));
+	pwm_set_chan_level(dac_iq, PWM_CHAN_B, DAC_BIAS + (qh/8));
 
 	return true;
 }
 
 
-/* CORE1: Timing loop, triggered through inter-core fifo */
+/* 
+ * CORE1: 
+ * Timing loop, triggered through inter-core fifo 
+ */
 void dsp_loop()
 {
 	uint32_t cmd;
@@ -243,7 +229,7 @@ void dsp_loop()
     while(1) 
 	{
         cmd = multicore_fifo_pop_blocking();		// Wait for fifo output
-		if (cmd == DSP_TX)
+		if (cmd == DSP_TX)							// Change to switch(cmd) when more commands added
 			tx();
 		else
 			rx();
@@ -251,7 +237,11 @@ void dsp_loop()
 }
 
 
-/* CORE0: Timer callback, triggers core1 through inter-core fifo */
+/* 
+ * CORE0: 
+ * Timer callback, triggers core1 through inter-core fifo.
+ * Either TX or RX, but could do both when testing in loopback on I+Q channels.
+ */
 struct repeating_timer dsp_timer;
 bool dsp_callback(struct repeating_timer *t) 
 {
@@ -264,18 +254,21 @@ bool dsp_callback(struct repeating_timer *t)
 }
 
 
-/* CORE0: Initialize dsp context and spawn core1 process */
+/* 
+ * CORE0: 
+ * Initialize dsp context and spawn core1 process 
+ */
 void dsp_init() 
 {
 	uint16_t slice_num;
 	
 	/* Initialize DACs */
-//	gpio_set_function(0, GPIO_FUNC_PWM);			// GP0 is PWM for I DAC (Slice 0, Channel A)
-//	gpio_set_function(1, GPIO_FUNC_PWM);			// GP1 is PWM for Q DAC (Slice 0, Channel B)
-//	dac_iq = pwm_gpio_to_slice_num(0);				// Get PWM slice for GP0 (Same for GP1)
-//	pwm_set_clkdiv_int_frac (dac_iq, 1, 0);			// clock divide by 1
-//	pwm_set_wrap(dac_iq, DAC_RANGE);				// Set cycle length
-//	pwm_set_enabled(dac_iq, true); 					// Set the PWM running
+	gpio_set_function(0, GPIO_FUNC_PWM);			// GP0 is PWM for I DAC (Slice 0, Channel A)
+	gpio_set_function(1, GPIO_FUNC_PWM);			// GP1 is PWM for Q DAC (Slice 0, Channel B)
+	dac_iq = pwm_gpio_to_slice_num(0);				// Get PWM slice for GP0 (Same for GP1)
+	pwm_set_clkdiv_int_frac (dac_iq, 1, 0);			// clock divide by 1
+	pwm_set_wrap(dac_iq, DAC_RANGE);				// Set cycle length
+	pwm_set_enabled(dac_iq, true); 					// Set the PWM running
 	
 	gpio_set_function(2, GPIO_FUNC_PWM);			// GP2 is PWM for Audio DAC (Slice 1, Channel A)
 	dac_audio = pwm_gpio_to_slice_num(2);			// Find PWM slice for GP2

@@ -10,6 +10,7 @@
  *
  */
 #include <stdio.h>
+#include <string.h>
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "hardware/timer.h"
@@ -64,6 +65,8 @@
 #define I2C0_SDA 8
 #define I2C0_SCL 9
 
+uint8_t lcd_buf[2][16];								// Buffer, y={0,1}, x={0..15}
+uint8_t lcd_x, lcd_y;
 
 void lcd_init(void)
 { 
@@ -93,11 +96,20 @@ void lcd_ctrl(uint8_t cmd, uint8_t x, uint8_t y)
 	switch(cmd)
 	{
 	case LCD_CLEAR:
+		for (lcd_x=0; lcd_x<16; lcd_x++)
+		{
+			lcd_buf[0][lcd_x] = ' ';
+			lcd_buf[1][lcd_x] = ' ';
+		}
+		lcd_y = 0x00;
+		lcd_x = 0x00;		
 		txdata[1] = LCD_CLEARDISPLAY;
 		i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
 		sleep_us(1530);
 		break;
 	case LCD_HOME:
+		lcd_y = 0x00;
+		lcd_x = 0x00;		
 		txdata[1] = LCD_RETURNHOME;
 		i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
 		sleep_us(39);
@@ -111,46 +123,63 @@ void lcd_ctrl(uint8_t cmd, uint8_t x, uint8_t y)
 		sleep_us(39);
 		break;
 	case LCD_GOTO: 					// 2-row is 0x00-0x27 per row, only 0x00-0x1F are visible
+		lcd_y = y&0x01;
+		lcd_x = x&0x0f;
 		if (y==1)
-			txdata[1] = (x&0x0f) | 0xc0;
+			txdata[1] = lcd_x | 0xc0;
 		else
-			txdata[1] = (x&0x0f) | 0x80;
+			txdata[1] = lcd_x | 0x80;
 		i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
 		sleep_us(39);
 		break;
 	}
 }
 
-void lcd_write(uint8_t *s, uint8_t len)
+void lcd_put(uint8_t c)
 {
-	uint8_t i;
-	uint8_t *p;
-	uint8_t txdata[8];
-	
+	uint8_t txdata[3];
+
+	lcd_buf[lcd_y][lcd_x]=c;
+	lcd_x = (lcd_x<15)?(lcd_x + 1):lcd_x;
 	txdata[0] = 0x40;
-	p=s;
-	for (i=0; i<len; i++)
-	{
-		txdata[1] = *p++;
-		i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
-		sleep_us(43);
-	}
+	txdata[1] = c;
+	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	sleep_us(43);
 }
+
+void lcd_write(uint8_t *s)
+{
+	uint8_t i, len;
+	uint8_t txdata[18];
+
+	len = strlen(s);
+	len = (len>(16-lcd_x))?(16-lcd_x):len;
+	txdata[0] = 0x40;
+	for(i=0; i<len; i++)
+	{
+		lcd_buf[lcd_y][lcd_x++]=s[i];
+		txdata[i+1]=s[i];
+	}
+	i2c_write_blocking(i2c0, I2C_LCD, txdata, len+1, false);
+	sleep_us(43);
+}
+
 
 void lcd_test(void)
 {
-	uint8_t chr[16];
+	uint8_t chr[17];
 	int i, j;
 	
+	chr[16] = 0; 
 	lcd_ctrl(LCD_CLEAR,0,0);
 	for (i=0; i<16; i++)
 	{
 		for(j=0; j<16; j++) chr[j] = (uint8_t)(16*i+j);
 		lcd_ctrl(LCD_GOTO,0,0);
-		lcd_write(chr, 16);
+		lcd_write(chr);
 		sleep_ms(800);
 		lcd_ctrl(LCD_GOTO,0,1);
-		lcd_write(chr, 16);
+		lcd_write(chr);
 	}
 	lcd_ctrl(LCD_CLEAR,0,0);
 }

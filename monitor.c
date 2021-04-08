@@ -71,7 +71,7 @@ void mon_init()
 
 void mon_read(uint32_t timeout)
 {
-	int i = 0;
+	static int i = 0;
 	int c = getchar_timeout_us(timeout);
 	switch (c)
 	{
