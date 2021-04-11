@@ -170,8 +170,8 @@ Control Si5351:
 
 
 /* I2C1 pins */
-#define I2C1_SDA 10
-#define I2C1_SCL 11
+#define I2C1_SDA 18
+#define I2C1_SCL 19
 
 vfo_t vfo[2];				// 0: clk0 and clk1     1: clk2
 

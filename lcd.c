@@ -62,8 +62,8 @@
 
 /* I2C address and pins */
 #define I2C_LCD 0x3E
-#define I2C0_SDA 8
-#define I2C0_SCL 9
+#define I2C0_SDA 16
+#define I2C0_SCL 17
 
 uint8_t lcd_buf[2][16];								// Buffer, y={0,1}, x={0..15}
 uint8_t lcd_x, lcd_y;

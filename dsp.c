@@ -263,15 +263,15 @@ void dsp_init()
 	uint16_t slice_num;
 	
 	/* Initialize DACs */
-	gpio_set_function(0, GPIO_FUNC_PWM);			// GP0 is PWM for I DAC (Slice 0, Channel A)
-	gpio_set_function(1, GPIO_FUNC_PWM);			// GP1 is PWM for Q DAC (Slice 0, Channel B)
-	dac_iq = pwm_gpio_to_slice_num(0);				// Get PWM slice for GP0 (Same for GP1)
+	gpio_set_function(20, GPIO_FUNC_PWM);			// GP20 is PWM for I DAC (Slice 2, Channel A)
+	gpio_set_function(21, GPIO_FUNC_PWM);			// GP21 is PWM for Q DAC (Slice 2, Channel B)
+	dac_iq = pwm_gpio_to_slice_num(20);				// Get PWM slice for GP20 (Same for GP21)
 	pwm_set_clkdiv_int_frac (dac_iq, 1, 0);			// clock divide by 1
 	pwm_set_wrap(dac_iq, DAC_RANGE);				// Set cycle length
 	pwm_set_enabled(dac_iq, true); 					// Set the PWM running
 	
-	gpio_set_function(2, GPIO_FUNC_PWM);			// GP2 is PWM for Audio DAC (Slice 1, Channel A)
-	dac_audio = pwm_gpio_to_slice_num(2);			// Find PWM slice for GP2
+	gpio_set_function(22, GPIO_FUNC_PWM);			// GP22 is PWM for Audio DAC (Slice 3, Channel A)
+	dac_audio = pwm_gpio_to_slice_num(22);			// Find PWM slice for GP22
 	pwm_set_clkdiv_int_frac (dac_audio, 1, 0);		// clock divide by 1
 	pwm_set_wrap(dac_audio, DAC_RANGE);				// Set cycle length
 	pwm_set_enabled(dac_audio, true); 				// Set the PWM running

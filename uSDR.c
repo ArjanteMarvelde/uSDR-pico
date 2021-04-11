@@ -26,8 +26,6 @@
 #include "monitor.h"
 
 
-
-
 /* 
  * LED TIMER definition and callback routine
  */
@@ -51,13 +49,13 @@ int main()
 	add_repeating_timer_ms(-1000, led_callback, NULL, &led_timer);
 
 	/* Initialize units */
-	si_init();										// VFO control unit
-	lcd_init();										// LCD output unit
-	dsp_init();										// Signal processing unit
 	mon_init();										// Monitor shell on stdio
+	lcd_init();										// LCD output unit
+	si_init();										// VFO control unit
+	dsp_init();										// Signal processing unit
 	
 	SI_SETFREQ(0, 2*7074000UL);						// Set freq to 2*7074 kHz
-	SI_SETPHASE(0,2);								// Set phase to 180deg
+	SI_SETPHASE(0, 2);								// Set phase to 180deg
 	si_evaluate();									// Commit setting
 
 	//lcd_test();									// Test LCD character set
