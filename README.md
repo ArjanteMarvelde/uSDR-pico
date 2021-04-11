@@ -21,8 +21,8 @@ The RX branch
 
 The main loop takes care of user I/O and the serial port. There is also a LED flashing timer callback.
 
-The Pico controls an Si5351A clock module to obtain the switching clock for the QSE and QSD. The module outputs two synchronous square wave clocks on ch 0 and 1, whith selectable phase difference (0, 90, 180 or 270 degrees). The clock on ch2 is free to be used for other goals. The module is controlled over the **i2c0** channel.
-The display is a standard 16x2 LCD, but with an I2C interface. The display is connected through the **i2c1** channel.
+The Pico controls an Si5351A clock module to obtain the switching clock for the QSE and QSD. The module outputs two synchronous square wave clocks on ch 0 and 1, whith selectable phase difference (0, 90, 180 or 270 degrees). The clock on ch2 is free to be used for other goals. The module is controlled over the **i2c1** channel.
+The display is a standard 16x2 LCD, but with an I2C interface. The display is connected through the **i2c0** channel.
 
 ## Open issues: 
 - [x] take care of processing cycles, by moving signal processing parts to the second core
