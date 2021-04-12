@@ -14,6 +14,7 @@
 
 #include "lcd.h"
 #include "si5351.h"
+#include "dsp.h"
 #include "monitor.h"
 
 /* Monitor definitions */
@@ -27,11 +28,12 @@ char mon_cmd[CMD_LEN+1];
 
 
 uint8_t si5351_reg[200];
+bool ptt = false;
 
 /* Commandstring parser */
 char delim[] = " ";
 #define NCMD	4
-char shell[NCMD][3] = {"si", "lt", "fb", "xx"};
+char shell[NCMD][3] = {"si", "lt", "fb", "pt"};
 void mon_parse(char* s)
 {
 	char *p;
@@ -54,8 +56,20 @@ void mon_parse(char* s)
 		lcd_test();
 		break;
 	case 2:
-	case 3:
 		printf("%s\n", p);
+		break;
+	case 3:
+		if (ptt)
+		{
+			ptt = false;
+			printf("PTT released\n");
+		}
+		else
+		{
+			ptt = true;
+			printf("PTT active\n");
+		}
+		dsp_ptt(ptt);
 		break;
 	default:
 		printf("??\n");

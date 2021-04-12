@@ -15,5 +15,7 @@
 
 
 void dsp_init();
+void dsp_ptt(bool active);
+
 
 #endif

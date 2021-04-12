@@ -75,12 +75,20 @@ int16_t lpf15_62[15] = { -1,  3, 12,  6,-12, -4, 40, 69, 40, -4,-12,  6, 12,  3,
 volatile uint16_t dac_iq, dac_audio;
 volatile bool tx_enabled;
 
+void dsp_ptt(bool active)
+{
+	tx_enabled = active;
+}
+	
 
 /* 
  * CORE1: 
  * Execute RX branch signal processing
  */
-volatile int16_t i_s[15], q_s[15], i_dc, q_dc, i_prev;
+volatile int16_t i_s_pre[15], q_s_pre[15];			// Raw I/Q samples minus DC bias
+volatile int16_t i_s[15], q_s[15];					// Filtered I/Q samples
+volatile int16_t i_dc, q_dc; 						// DC bias for I/Q channel
+volatile int16_t i_prev;							// Last I-channel raw sample
 bool rx(void) 
 {
 	static bool q_phase;
@@ -98,7 +106,7 @@ bool rx(void)
 		 * Shift Q samples 
 		 */
 		for (i=0; i<14; i++) 
-			q_s[i] = q_s[i+1];						// Q samples delay line
+			q_s_pre[i] = q_s_pre[i+1];				// Q samples delay line
 		
 		/*
 		 * Remove DC and store new sample
@@ -106,9 +114,20 @@ bool rx(void)
 		 *  y(t) = w(t) - w(t-1) 
 		 */
 //		sample += (((q_dc<<3)-q_dc)>>3);			// Use sample as temporary q_dc
-//		q_s[14] = sample - q_dc;					// Calculate output
+//		q_s_pre[14] = sample - q_dc;				// Calculate output
 //		q_dc = sample;								// Store new q_dc
-		q_s[14] = sample;
+		q_s_pre[14] = sample;
+		
+		/*
+		 * Low pass filter
+		 */
+		for (i=0; i<14; i++) 						// Shift samples
+			q_s[i] = q_s[i+1];
+		accu = 0;
+		for (i=0; i<15; i++)						// Low pass FIR filter
+			accu += (int32_t)q_s_pre[i]*lpf3_31[i];	// 3kHz, at 31.25 kHz sampling
+		q_s[14] = accu / 256;
+		
 		q_phase = false;							// Next: I branch
 	}
 	else
@@ -120,7 +139,7 @@ bool rx(void)
 		 * Shift I samples
 		 */
 		for (i=0; i<14; i++) 
-			i_s[i] = i_s[i+1];						// I samples delay line
+			i_s_pre[i] = i_s_pre[i+1];				// I samples delay line
 		
 		/*
 		 * Remove DC and store new sample: average last two to get in phase with Q
@@ -128,11 +147,21 @@ bool rx(void)
 		 *  y(t) = w(t) - w(t-1) 
 		 */
 //		sample += (((i_dc<<3)-i_dc)>>3);			// Use sample as temporary i_dc
-//		i_s[14] = sample - i_dc;					// Calculate output
+//		i_s_pre[14] = sample - i_dc;				// Calculate output
 //		i_dc = sample;								// Store new i_dc
-//		sample = i_s[14];							// Get out uncorrected sample
-		i_s[14] = (sample + i_prev)/2;				// Correct for phase difference with Q samples
+//		sample = i_s_pre[14];						// Get out uncorrected sample
+		i_s_pre[14] = (sample + i_prev)/2;			// Correct for phase difference with Q samples
 		i_prev = sample;							// Remember last sample for next I-phase
+
+		/*
+		 * Low pass filter
+		 */
+		for (i=0; i<14; i++) 						// Shift samples
+			i_s[i] = i_s[i+1];
+		accu = 0;
+		for (i=0; i<15; i++)						// Low pass FIR filter
+			accu += (int32_t)i_s_pre[i]*lpf3_31[i];	// 3kHz, at 31.25 kHz sampling
+		i_s[14] = accu / 256;
 
 		/* 
 		 * Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills):
@@ -159,7 +188,9 @@ bool rx(void)
  * CORE1: 
  * Execute TX branch signal processing
  */
-volatile int16_t a_s_pre[15], a_s[15], a_dc;
+volatile int16_t a_s_pre[15]; 						// Raw samples, minus DC bias
+volatile int16_t a_s[15];							// Filtered and decimated samples
+volatile int16_t a_dc;								// DC level
 bool tx(void) 
 {
 	static int tx_phase = 0;

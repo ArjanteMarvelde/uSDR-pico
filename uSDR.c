@@ -16,10 +16,11 @@
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
-#include "hardware/pio.h"
+#include "hardware/gpio.h"
 #include "hardware/timer.h"
 #include "hardware/clocks.h"
 
+#include "hmi.h"
 #include "lcd.h"
 #include "dsp.h"
 #include "si5351.h"
@@ -50,20 +51,21 @@ int main()
 
 	/* Initialize units */
 	mon_init();										// Monitor shell on stdio
-	lcd_init();										// LCD output unit
 	si_init();										// VFO control unit
 	dsp_init();										// Signal processing unit
+	lcd_init();										// LCD output unit
+	hmi_init();										// HMI user inputs
 	
-	SI_SETFREQ(0, 2*7074000UL);						// Set freq to 2*7074 kHz
-	SI_SETPHASE(0, 2);								// Set phase to 180deg
-	si_evaluate();									// Commit setting
+	//SI_SETFREQ(0, 2*7074000UL);						// Set freq to 2*7074 kHz
+	//SI_SETPHASE(0, 2);								// Set phase to 180deg
+	//si_evaluate();									// Commit setting
 
 	//lcd_test();									// Test LCD character set
 	
-	lcd_ctrl(LCD_GOTO, 0, 0);						// Go to (col, row)
-	lcd_write(" 7074.0 kHz  USB");					// Max 16 char per line!
-	lcd_ctrl(LCD_GOTO, 1, 0);
-	lcd_ctrl(LCD_CURSOR, 1, 0);						// Switch cursor on
+	//lcd_ctrl(LCD_GOTO, 0, 0);						// Go to (col, row)
+	//lcd_write(" 7074.0 kHz  USB");					// Max 16 char per line!
+	//lcd_ctrl(LCD_GOTO, 1, 0);
+	//lcd_ctrl(LCD_CURSOR, 1, 0);						// Switch cursor on
 	
 	while (1) 
 	{
