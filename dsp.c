@@ -10,10 +10,9 @@
  * This fifo is written from core0 from a 16us timer callback routine (i.e. 62.5kHz)
  *
  * The RX branch:
- * - Sample I and Q QSD channels intermittently, and shift into I and Q delay line (31.25 kHz per channel)
+ * - Sample I and Q QSD channels, and shift into I and Q delay line (62.5 kHz per channel)
  * - Low pass filter: Fc=4kHz
- * - Interpolate last two I samples to correct sampling phase difference with Q
- * - Quarter rate (7.8125 kHz) to improve low F behavior of Hilbert transform
+ * - Quarter rate (15.625 kHz) to improve low F behavior of Hilbert transform
  * - Calculate 15 tap Hilbert transform on Q
  * - Demodulate, SSB: Q - I, taking proper delays into account
  * - Push to Audio output DAC
@@ -41,8 +40,9 @@
  * DAC_RANGE defines PWM cycle, determining DAC resolution and PWM frequency.
  * DAC resolution = Vcc / DAC_RANGE
  * PWM frequency = Fsys / DAC_RANGE
- * A value of 500 means 125MHz/500=250kHz [or 250 and 500kHz]
+ * A value of 250 means 125MHz/250=500kHz
  * ADC is 12 bit, so resolution is by definition 4096
+ * To eliminate undefined behavior we clip off the upper 4 sample bits.
  */
 #define DAC_RANGE	250
 #define DAC_BIAS	DAC_RANGE/2
@@ -53,7 +53,7 @@
  * Callback timeout and inter-core FIFO commands. 
  * The timer value in usec determines frequency of TX and RX loops
  * Exact time is obtained by passing the value as negative
- * Here we use 16us (62.5 kHz == PWM freq/4 [or 8]) 
+ * Here we use 16us (62.5 kHz == PWM freq/4) 
  */
 #define DSP_US		16
 #define DSP_TX		1
@@ -84,101 +84,82 @@ void dsp_ptt(bool active)
 /* 
  * CORE1: 
  * Execute RX branch signal processing
+ * No interleaving, since only 2us per conversion
  */
-volatile int16_t i_s_pre[15], q_s_pre[15];			// Raw I/Q samples minus DC bias
+volatile int16_t i_s_raw[15], q_s_raw[15];			// Raw I/Q samples minus DC bias
 volatile int16_t i_s[15], q_s[15];					// Filtered I/Q samples
 volatile int16_t i_dc, q_dc; 						// DC bias for I/Q channel
-volatile int16_t i_prev;							// Last I-channel raw sample
+volatile int dec_cnt=0;								// Decimation counter
 bool rx(void) 
 {
-	static bool q_phase;
-	int16_t sample;
-	int32_t accu;
+	int16_t q_sample, i_sample;
+	int32_t q_accu, i_accu;
 	int16_t qh;
 	int i;
 		
-	if (q_phase)
+	adc_select_input(1);							// Q channel ADC 
+	q_sample = (int16_t)adc_read();					// Take Q sample
+	adc_select_input(0);							// I channel ADC 
+	i_sample = (int16_t)adc_read();					// Take I sample
+
+	/* 
+	 * Shift in I and Q raw samples 
+	 */
+	for (i=0; i<14; i++)
 	{
-		adc_select_input(1);						// Q channel ADC 
-		sample = (int16_t)adc_read() - ADC_BIAS;	// Take sample and subtract mid-level
-		
-		/* 
-		 * Shift Q samples 
-		 */
-		for (i=0; i<14; i++) 
-			q_s_pre[i] = q_s_pre[i+1];				// Q samples delay line
-		
-		/*
-		 * Remove DC and store new sample
-		 *  w(t) = x(t) + a*w(t-1) (use a=7/8, ca 0.87)
-		 *  y(t) = w(t) - w(t-1) 
-		 */
-//		sample += (((q_dc<<3)-q_dc)>>3);			// Use sample as temporary q_dc
-//		q_s_pre[14] = sample - q_dc;				// Calculate output
-//		q_dc = sample;								// Store new q_dc
-		q_s_pre[14] = sample;
-		
-		/*
-		 * Low pass filter
-		 */
-		for (i=0; i<14; i++) 						// Shift samples
-			q_s[i] = q_s[i+1];
-		accu = 0;
-		for (i=0; i<15; i++)						// Low pass FIR filter
-			accu += (int32_t)q_s_pre[i]*lpf3_31[i];	// 3kHz, at 31.25 kHz sampling
-		q_s[14] = accu / 256;
-		
-		q_phase = false;							// Next: I branch
+		q_s_raw[i] = q_s_raw[i+1];					// Q raw samples shift register
+		i_s_raw[i] = i_s_raw[i+1];					// I raw samples shift register
 	}
-	else
-	{
-		adc_select_input(0);						// I channel ADC 
-		sample = (int16_t)adc_read() - ADC_BIAS;	// Take sample and subtract mid-level
 		
-		/* 
-		 * Shift I samples
-		 */
-		for (i=0; i<14; i++) 
-			i_s_pre[i] = i_s_pre[i+1];				// I samples delay line
+	/*
+	 * Remove DC and store new sample
+	 *  w(t) = x(t) + a*w(t-1) (use a=7/8, ca 0.87)
+	 *  y(t) = w(t) - w(t-1) 
+	 */
+//	q_sample += (((q_dc<<3)-q_dc)>>3);				// Use sample as temporary q_dc
+//	q_s_raw[14] = q_sample - q_dc;					// Calculate output
+//	q_dc = q_sample;								// Store new q_dc
+	q_s_raw[14] = (q_sample&0x0fff) - ADC_BIAS; 		//     just clip and subtract mid-level
 		
-		/*
-		 * Remove DC and store new sample: average last two to get in phase with Q
-		 *  w(t) = x(t) + a*w(t-1) (use a=7/8, ca 0.87)
-		 *  y(t) = w(t) - w(t-1) 
-		 */
-//		sample += (((i_dc<<3)-i_dc)>>3);			// Use sample as temporary i_dc
-//		i_s_pre[14] = sample - i_dc;				// Calculate output
-//		i_dc = sample;								// Store new i_dc
-//		sample = i_s_pre[14];						// Get out uncorrected sample
-		i_s_pre[14] = (sample + i_prev)/2;			// Correct for phase difference with Q samples
-		i_prev = sample;							// Remember last sample for next I-phase
-
-		/*
-		 * Low pass filter
-		 */
-		for (i=0; i<14; i++) 						// Shift samples
-			i_s[i] = i_s[i+1];
-		accu = 0;
-		for (i=0; i<15; i++)						// Low pass FIR filter
-			accu += (int32_t)i_s_pre[i]*lpf3_31[i];	// 3kHz, at 31.25 kHz sampling
-		i_s[14] = accu / 256;
-
-		/* 
-		 * Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills):
-		 */	
-		accu = (q_s[0]-q_s[14])*315L + (q_s[2]-q_s[12])*440L + (q_s[4]-q_s[10])*734L + (q_s[6]-q_s[ 8])*2202L;
-		qh = accu / 4096;	 
+//	-_sample += (((i_dc<<3)-i_dc)>>3);				// Use sample as temporary i_dc
+//	i_s_raw[14] = i_sample - i_dc;					// Calculate output
+//	i_dc = i_sample;								// Store new i_dc
+	i_s_raw[14] = (i_sample&0x0fff) - ADC_BIAS; 		//     just clip and subtract mid-level
 		
-		/* 
-		 * SSB demodulate: I[7] - Qh
-		 * Range should be within DAC_RANGE
-		 * Add 250 offset and send to audio DAC output
-		 */
-		sample = (i_s[7] - qh)/16;
-		pwm_set_chan_level(dac_audio, PWM_CHAN_A, DAC_BIAS + sample);
+	/*
+	 * Low pass filter + decimation
+	 */
+	dec_cnt = (dec_cnt+1)&0x03;						// Use only every fourth sample
+	if (dec_cnt>0) return true;
 	
-		q_phase = true;								// Next: Q branch
+	for (i=0; i<14; i++) 							// Shift samples
+	{
+		q_s[i] = q_s[i+1];
+		i_s[i] = i_s[i+1];
 	}
+	q_accu = 0;
+	i_accu = 0;
+	for (i=0; i<15; i++)							// Low pass FIR filter
+	{
+		q_accu += (int32_t)q_s_raw[i]*lpf3_62[i];	// Fc=3kHz, at 62.5 kHz sampling		
+		i_accu += (int32_t)i_s_raw[i]*lpf3_62[i];	// Fc=3kHz, at 62.5 kHz sampling	
+	}
+	q_s[14] = q_accu >> 8;
+	i_s[14] = q_accu >> 8;
+
+	/* 
+	 * Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills)
+	 */	
+	q_accu = (q_s[0]-q_s[14])*315L + (q_s[2]-q_s[12])*440L + (q_s[4]-q_s[10])*734L + (q_s[6]-q_s[ 8])*2202L;
+	qh = q_accu >> 12;	 
+	
+	/* 
+	 * SSB demodulate: I[7] - Qh
+	 * Range should be within DAC_RANGE
+	 * Add 250 offset and send to audio DAC output
+	 */
+	q_sample = (i_s[7] - qh)/8;
+	pwm_set_chan_level(dac_audio, PWM_CHAN_A, DAC_BIAS + q_sample);
 
 	return true;
 }
