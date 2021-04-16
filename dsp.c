@@ -113,6 +113,7 @@ bool rx(void)
 		
 	/*
 	 * Remove DC and store new sample
+	 //Other algo: y[i] = alpha * x[i] + (1-alpha) * y[i-1]
 	 *  w(t) = x(t) + a*w(t-1) (use a=7/8, ca 0.87)
 	 *  y(t) = w(t) - w(t-1) 
 	 */
@@ -155,12 +156,31 @@ bool rx(void)
 	
 	/* 
 	 * SSB demodulate: I[7] - Qh
-	 * Range should be within DAC_RANGE
-	 * Add 250 offset and send to audio DAC output
+	 * Add DAC_BIAS offset, Clip to DAC_RANGE and send to audio DAC output
 	 */
-	q_sample = (i_s[7] - qh)/8;
-	pwm_set_chan_level(dac_audio, PWM_CHAN_A, DAC_BIAS + q_sample);
+	q_sample = ((i_s[7] - qh)/8)+DAC_BIAS;
+	q_sample = (q_sample>DAC_RANGE)?DAC_RANGE:((q_sample<0)?0:q_sample);
+	pwm_set_chan_level(dac_audio, PWM_CHAN_A, q_sample);
 
+
+/* AGC ALGORITHM
+if(m_Peak>m_AttackAve) 																//if power is rising (use m_AttackRiseAlpha time constant)
+	m_AttackAve = (1.0-m_AttackRiseAlpha)*m_AttackAve + m_AttackRiseAlpha*m_Peak;
+else 																				//else magnitude is falling (use m_AttackFallAlpha time constant)
+	m_AttackAve = (1.0-m_AttackFallAlpha)*m_AttackAve + m_AttackFallAlpha*m_Peak;
+if(m_Peak>m_DecayAve) 																//if magnitude is rising (use m_DecayRiseAlpha time constant)
+{
+	m_DecayAve = (1.0-m_DecayRiseAlpha)*m_DecayAve + m_DecayRiseAlpha*m_Peak;
+	m_HangTimer = 0; 																//reset hang timer
+}
+else
+{ 																					//here if decreasing signal
+if(m_HangTimer<m_HangTime)
+	m_HangTimer++; 																	//just inc and hold current m_DecayAve
+else 																				//else decay with m_DecayFallAlpha which is RELEASE_TIMECONST
+	m_DecayAve = (1.0-m_DecayFallAlpha)*m_DecayAve + m_DecayFallAlpha*m_Peak;
+}
+*/
 	return true;
 }
 

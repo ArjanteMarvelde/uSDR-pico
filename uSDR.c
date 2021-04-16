@@ -56,21 +56,11 @@ int main()
 	lcd_init();										// LCD output unit
 	hmi_init();										// HMI user inputs
 	
-	//SI_SETFREQ(0, 2*7074000UL);						// Set freq to 2*7074 kHz
-	//SI_SETPHASE(0, 2);								// Set phase to 180deg
-	//si_evaluate();									// Commit setting
-
-	//lcd_test();									// Test LCD character set
-	
-	//lcd_ctrl(LCD_GOTO, 0, 0);						// Go to (col, row)
-	//lcd_write(" 7074.0 kHz  USB");					// Max 16 char per line!
-	//lcd_ctrl(LCD_GOTO, 1, 0);
-	//lcd_ctrl(LCD_CURSOR, 1, 0);						// Switch cursor on
-	
 	while (1) 
 	{
-		mon_read(100000L);							// Check monitor input, wait max 100msec
-		si_evaluate();								// Check VFO settings
+		mon_evaluate(10000L);						// Check monitor input, wait max 10000 usec
+		si_evaluate();								// Refresh VFO settings
+		hmi_evaluate();								// Refresh HMI
 	}
 
     return 0;

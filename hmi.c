@@ -15,8 +15,15 @@
  *
  * The rotary encoder (GP2, GP3) controls an up/down counter connected to some field. 
  * It may be that the encoder has a bushbutton as well, this can be connected to GP4.
+ *     ___     ___
+ * ___|   |___|   |___  A
+ *   ___     ___     _
+ * _|   |___|   |___|   B
  *
- * The PTT is connected to GP15 and will always be active, even when VOX is used.
+ * Encoder channel A triggers on falling edge. 
+ * Depending on B level, count is incremented or decremented.
+ * 
+ * The PTT is connected to GP15 and will be active, except when VOX is used.
  *
  */
 #include <stdio.h>
@@ -36,10 +43,10 @@
  */
 #define GP_ENC_A	2
 #define GP_ENC_B	3
-#define GP_AUX_0	6
-#define GP_AUX_1	7
-#define GP_AUX_2	8
-#define GP_AUX_3	9
+#define GP_AUX_0	6								// Enter, Confirm
+#define GP_AUX_1	7								// Escape, Cancel
+#define GP_AUX_2	8								// Left move
+#define GP_AUX_3	9								// Right move
 #define GP_PTT		15
 #define GP_MASK_IN	((1<<GP_ENC_A)|(1<<GP_ENC_B)|(1<<GP_AUX_0)|(1<<GP_AUX_1)|(1<<GP_AUX_2)|(1<<GP_AUX_3)|(1<<GP_PTT))
 
@@ -51,22 +58,81 @@
 
 /*
  * Display layout: +----------------+
- *                 |USB 14074.1  920| --> USB mode, 14074.1 kHz, S9+20dB
- *                 |Fast  -20      5| --> Fast AGC, -20dB preamp, volume level 5
+ *                 |USB 14074.0  920| --> USB mode, 14074.0 kHz, S9+20dB
+ *                 |Tune  Att   Fast| --> Menu:Tune, Attenuator, Fast AGC
  *                 +----------------+
- * Menu statemachine: array of states and what to do per input event:
- * Menu								Encoder 	Enter		Escape		Left		Right
- * 0: Tune		Frequency			<value>		Menu 1					<dig		dig>
- * 1: Mode		USB, LSB, AM, CW	Menu 2
- * 2: AGC		Fast, Slow, Off		Menu 3
- * 3: Pre		+20dB, 0, -20dB		Menu 4
- * 4: Vol 		5, 4, 3, 2, 1
+ * LEFT and RIGHT buttons (or encoder) are used to navigate sub-menus such as {tune,mode,agc,pre}.
+ * ENTER is used to get into the sub-menu.
+ * ENTER is used again to exit and accept changes or ESCAPE to exit without changes. 
+ *
+ * When entered in a submenu:
+ * Menu		Values				Encoder 	Enter		Escape		Left		Right
+ * -------------------------------------------------------------------------------------
+ * Mode		USB, LSB, AM, CW	<value>		Accept		Exit		<value>		<value>
+ * Tune		Frequency (digit)	<value>		Accept		Exit		<=dig		dig=>
+ * AGC		Fast, Slow, Off		<value>		Accept		Exit		<value>		<value>
+ * Pre		+20dB, 0, -20dB		<value>		Accept		Exit		<value>		<value>
  */
+ 
+/* State definitions */
+#define HMI_S_MENU		0
+#define HMI_S_TUNE		1
+#define HMI_S_MODE		2
+#define HMI_S_AGC		3
+#define HMI_S_PRE		4
 
-uint8_t hmi_agc;
-uint8_t hmi_mode;
-uint8_t hmi_preamp;
-uint8_t hmi_vol;
+/* Sub menu string sets */
+char hmi_s_menu[5][8] = {"Menu","Tune","Mode","AGC ","Pre "};
+char hmi_s_mode[4][8] = {"USB", "LSB", " AM", " CW"};
+char hmi_s_agc [3][8] = {"NoGC", "Slow", "Fast"};
+char hmi_s_pre [3][8] = {"Off", "Amp", "Att"};
+
+uint8_t  hmi_state, hmi_mode, hmi_agc, hmi_pre;
+uint32_t hmi_freq;
+uint8_t  hmi_sub, hmi_option;
+
+/*
+ * Redraw the LCD
+ */
+void hmi_evaluate(void)
+{
+	char s[20];
+	
+	sprintf(s, "%s %7.1f  %3d", hmi_s_mode[hmi_mode], (double)hmi_freq/1000.0, 920);
+	lcd_writexy(0,0,s);
+	switch (hmi_state)
+	{
+	case HMI_S_MENU:
+		sprintf(s, "%s   %s  %s", hmi_s_menu[hmi_sub], hmi_s_pre[hmi_pre], hmi_s_agc[hmi_agc]);
+		lcd_writexy(0,1,s);	
+		lcd_curxy(0, 1, true);
+		break;
+	case HMI_S_TUNE:
+		sprintf(s, "%s   %s  %s", hmi_s_menu[HMI_S_TUNE], hmi_s_pre[hmi_pre], hmi_s_agc[hmi_agc]);
+		lcd_writexy(0,1,s);	
+		lcd_curxy(4+(hmi_option>4?6:hmi_option), 0, true);
+		break;
+	case HMI_S_MODE:
+		sprintf(s, "%s: %s       ", hmi_s_menu[HMI_S_MODE], hmi_s_mode[hmi_option]);
+		lcd_writexy(0,1,s);	
+		lcd_curxy(6, 1, true);
+		break;
+	case HMI_S_AGC:
+		sprintf(s, "%s: %s      ", hmi_s_menu[HMI_S_AGC], hmi_s_agc[hmi_option]);
+		lcd_writexy(0,1,s);	
+		lcd_curxy(6, 1, true);
+		break;
+	case HMI_S_PRE:
+		sprintf(s, "%s: %s       ", hmi_s_menu[HMI_S_PRE], hmi_s_pre[hmi_option]);
+		lcd_writexy(0,1,s);	
+		lcd_curxy(6, 1, true);
+		break;
+	default:
+		break;
+	}
+	
+
+}
 
 
 /*
@@ -85,15 +151,15 @@ void hmi_callback(uint gpio, uint32_t events)
 		break;
 	case GP_ENC_B:
 		break;
-	case GP_AUX_0:
+	case GP_AUX_0:									// Enter
 		break;
-	case GP_AUX_1:
+	case GP_AUX_1:									// Escape
 		break;
-	case GP_AUX_2:
+	case GP_AUX_2:									// Previous
 		break;
-	case GP_AUX_3:
+	case GP_AUX_3:									// Next
 		break;
-	case GP_PTT:
+	case GP_PTT:									// PTT
 		if (events&GPIO_IRQ_EDGE_FALL)
 			dsp_ptt(true);
 		else
@@ -103,7 +169,6 @@ void hmi_callback(uint gpio, uint32_t events)
 	default:
 		break;
 	}
-	
 }
 
 
@@ -137,14 +202,21 @@ void hmi_init(void)
 
 	// Set callback, one for all GPIO, not sure about correctness!
 	gpio_set_irq_enabled_with_callback(GP_ENC_A, GPIO_IRQ_EDGE_ALL, true, hmi_callback);
-	
+		
 	// Initialize LCD and set VFO
-	lcd_ctrl(LCD_CLEAR, 0, 0);
-	lcd_write("USB  7074.0  920");
-	lcd_ctrl(LCD_GOTO, 0, 1);
-	lcd_write("Fast  -20      5");
-	SI_SETFREQ(0, 2*7074000UL);						// Set freq to 2*7074 kHz
-	SI_SETPHASE(0, 2);								// Set phase to 180deg
+	lcd_clear();
+	
+	hmi_state = HMI_S_TUNE;
+	hmi_sub = 1;
+	hmi_option = 1;
+	hmi_mode = 0;
+	hmi_agc = 0;
+	hmi_pre = 0;
+	hmi_freq = 7074000UL;
+	
+	hmi_evaluate();
 
+	SI_SETFREQ(0, 2*hmi_freq);						// Set freq to 2*7074 kHz
+	SI_SETPHASE(0, 2);								// Set phase to 180deg
 }
 

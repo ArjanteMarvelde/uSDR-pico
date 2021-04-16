@@ -10,6 +10,6 @@
  */
 
 void mon_init();
-void mon_read(uint32_t timeout);
+void mon_evaluate(uint32_t timeout);
 
 #endif
