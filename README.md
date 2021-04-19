@@ -27,7 +27,8 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 
 ## Open issues: 
 - [x] take care of processing cycles, by moving signal processing parts to the second core
-- [ ] add some more filtering 
+- [X] add some more filtering
+- [ ] implement AGC and RSSI
 - [ ] implement the user I/O bit: LCD+Rotary encoder+buttons
 - [ ] sort out the surrounding HW
 
