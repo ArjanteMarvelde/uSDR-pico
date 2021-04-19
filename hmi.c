@@ -75,103 +75,189 @@
  */
  
 /* State definitions */
-#define HMI_S_MENU		0
-#define HMI_S_TUNE		1
-#define HMI_S_MODE		2
-#define HMI_S_AGC		3
-#define HMI_S_PRE		4
+#define HMI_S_MENU			0
+#define HMI_S_TUNE			1
+#define HMI_S_MODE			2
+#define HMI_S_AGC			3
+#define HMI_S_PRE			4
+#define HMI_NSTATES			5
 
-/* Sub menu string sets */
-char hmi_s_menu[5][8] = {"Menu","Tune","Mode","AGC ","Pre "};
-char hmi_s_mode[4][8] = {"USB", "LSB", " AM", " CW"};
-char hmi_s_agc [3][8] = {"NoGC", "Slow", "Fast"};
-char hmi_s_pre [3][8] = {"Off", "Amp", "Att"};
+/* Event definitions */
+#define HMI_E_NOEVENT		0
+#define HMI_E_INCREMENT		1
+#define HMI_E_DECREMENT		2
+#define HMI_E_ENTER			3
+#define HMI_E_ESCAPE		4
+#define HMI_E_LEFT			5
+#define HMI_E_RIGHT			6
+#define HMI_E_PTTON			7
+#define HMI_E_PTTOFF		8
+#define HMI_NEVENTS			9
 
-uint8_t  hmi_state, hmi_mode, hmi_agc, hmi_pre;
-uint32_t hmi_freq;
-uint8_t  hmi_sub, hmi_option;
+/* Sub menu option string sets */
+#define HMI_NMODE	4
+#define HMI_NAGC	3
+#define HMI_NPRE	3
+char hmi_o_menu[HMI_NSTATES][8] = {"Menu","Tune","Mode","AGC ","Pre "};	// Selected by hmi_state
+char hmi_o_mode[HMI_NMODE][8] = {"USB", "LSB", "AM ", "CW "};			// Selected by hmi_option/hmi_mode
+char hmi_o_agc [HMI_NAGC][8] = {"NoGC", "Slow", "Fast"};				// Selected by hmi_option/hmi_agc
+char hmi_o_pre [HMI_NPRE][8] = {"Off", "Amp", "Att"};					// Selected by hmi_option/hmi_pre
+
+uint8_t  hmi_state, hmi_option;											// Current state and option
+uint8_t  hmi_sub[HMI_NSTATES] = {0,4,0,0,0};							// Stored option per state
+uint32_t hmi_freq;														// Frequency from Tune state
+uint32_t hmi_step[6] = {10000000, 1000000, 100000, 10000, 1000, 100};	// Frequency digit increments
+#define HMI_MAXFREQ		30000000
+#define HMI_MINFREQ		     100
 
 /*
- * Redraw the LCD
+ * Finite State Machine,
+ * Handle event according to current state
  */
-void hmi_evaluate(void)
+void hmi_handler(uint8_t event)
 {
-	char s[20];
-	
-	sprintf(s, "%s %7.1f  %3d", hmi_s_mode[hmi_mode], (double)hmi_freq/1000.0, 920);
-	lcd_writexy(0,0,s);
-	switch (hmi_state)
+	switch(hmi_state)
 	{
 	case HMI_S_MENU:
-		sprintf(s, "%s   %s  %s", hmi_s_menu[hmi_sub], hmi_s_pre[hmi_pre], hmi_s_agc[hmi_agc]);
-		lcd_writexy(0,1,s);	
-		lcd_curxy(0, 1, true);
+		if ((event==HMI_E_INCREMENT)||(event==HMI_E_RIGHT))
+			hmi_option = (hmi_option<HMI_NSTATES-1)?hmi_option+1:1;
+		if ((event==HMI_E_DECREMENT)||(event==HMI_E_LEFT))
+			hmi_option = (hmi_option>1)?hmi_option-1:HMI_NSTATES-1;
+		if (event==HMI_E_ENTER)
+		{
+			hmi_state = hmi_option;										// Enter new submenu
+			hmi_option = hmi_sub[hmi_state];							// Restore option
+		}
 		break;
 	case HMI_S_TUNE:
-		sprintf(s, "%s   %s  %s", hmi_s_menu[HMI_S_TUNE], hmi_s_pre[hmi_pre], hmi_s_agc[hmi_agc]);
-		lcd_writexy(0,1,s);	
-		lcd_curxy(4+(hmi_option>4?6:hmi_option), 0, true);
-		break;
+		if (event==HMI_E_ENTER)
+		{
+			hmi_sub[hmi_state] = hmi_option;							// Store option
+			SI_SETFREQ(0, 2*hmi_freq);									// Commit frequency
+		}
+		if (event==HMI_E_ESCAPE)
+		{
+			hmi_sub[hmi_state] = hmi_option;							// Store option
+			hmi_option = hmi_state;
+			hmi_state = HMI_S_MENU;										// Leave submenu
+		}
+		if (event==HMI_E_INCREMENT)
+		{
+			hmi_freq += hmi_step[hmi_option];
+			if (hmi_freq > HMI_MAXFREQ) hmi_freq = HMI_MAXFREQ;
+		}
+		if (event==HMI_E_DECREMENT)
+		{
+			hmi_freq -= hmi_step[hmi_option];
+			if (hmi_freq < HMI_MINFREQ) hmi_freq = HMI_MINFREQ;
+		}
+		if (event==HMI_E_RIGHT)
+			hmi_option = (hmi_option<6)?hmi_option+1:0;
+		if (event==HMI_E_LEFT)
+			hmi_option = (hmi_option>0)?hmi_option-1:6;
+		break;	
 	case HMI_S_MODE:
-		sprintf(s, "%s: %s       ", hmi_s_menu[HMI_S_MODE], hmi_s_mode[hmi_option]);
-		lcd_writexy(0,1,s);	
-		lcd_curxy(6, 1, true);
+		if (event==HMI_E_ENTER)
+		{
+			// Set Mode
+			hmi_sub[hmi_state] = hmi_option;							// Store option	
+			hmi_option = hmi_state;
+			hmi_state = HMI_S_MENU;										// Leave submenu
+		}
+		if (event==HMI_E_ESCAPE)
+		{
+			hmi_option = hmi_state;
+			hmi_state = HMI_S_MENU;										// Leave submenu
+		}
+		if ((event==HMI_E_INCREMENT)||(event==HMI_E_RIGHT))
+			hmi_option = (hmi_option<HMI_NMODE-1)?hmi_option+1:0;
+		if ((event==HMI_E_DECREMENT)||(event==HMI_E_LEFT))
+			hmi_option = (hmi_option>0)?hmi_option-1:HMI_NMODE-1;
 		break;
 	case HMI_S_AGC:
-		sprintf(s, "%s: %s      ", hmi_s_menu[HMI_S_AGC], hmi_s_agc[hmi_option]);
-		lcd_writexy(0,1,s);	
-		lcd_curxy(6, 1, true);
+		if (event==HMI_E_ENTER)
+		{
+			// Set AGC
+			hmi_sub[hmi_state] = hmi_option;							// Store option	
+			hmi_option = hmi_state;
+			hmi_state = HMI_S_MENU;										// Leave submenu
+		}
+		if (event==HMI_E_ESCAPE)
+		{
+			hmi_option = hmi_state;
+			hmi_state = HMI_S_MENU;										// Leave submenu
+		}
+		if ((event==HMI_E_INCREMENT)||(event==HMI_E_RIGHT))
+			hmi_option = (hmi_option<HMI_NAGC-1)?hmi_option+1:0;
+		if ((event==HMI_E_DECREMENT)||(event==HMI_E_LEFT))
+			hmi_option = (hmi_option>0)?hmi_option-1:HMI_NAGC-1;
 		break;
 	case HMI_S_PRE:
-		sprintf(s, "%s: %s       ", hmi_s_menu[HMI_S_PRE], hmi_s_pre[hmi_option]);
-		lcd_writexy(0,1,s);	
-		lcd_curxy(6, 1, true);
-		break;
-	default:
+		if (event==HMI_E_ENTER)
+		{
+			// Set Preamp
+			hmi_sub[hmi_state] = hmi_option;							// Store option	
+			hmi_option = hmi_state;
+			hmi_state = HMI_S_MENU;										// Leave submenu
+		}
+		if (event==HMI_E_ESCAPE)
+		{
+			hmi_option = hmi_state;
+			hmi_state = HMI_S_MENU;										// Leave submenu
+		}
+		if ((event==HMI_E_INCREMENT)||(event==HMI_E_RIGHT))
+			hmi_option = (hmi_option<HMI_NPRE-1)?hmi_option+1:0;
+		if ((event==HMI_E_DECREMENT)||(event==HMI_E_LEFT))
+			hmi_option = (hmi_option>0)?hmi_option-1:HMI_NPRE-1;
 		break;
 	}
-	
-
 }
-
 
 /*
  * GPIO IRQ callback routine
  */
-volatile int count=0;
 void hmi_callback(uint gpio, uint32_t events)
 {
+	uint8_t evt=HMI_E_NOEVENT;
+
 	switch (gpio)
 	{
-	case GP_ENC_A:
-		if ((events&GPIO_IRQ_EDGE_FALL)&&gpio_get(GP_ENC_B))
-			count++;
-		else
-			count--;
-		break;
-	case GP_ENC_B:
+	case GP_ENC_A:									// Encoder
+		if (events&GPIO_IRQ_EDGE_FALL)
+			evt = gpio_get(GP_ENC_B)?HMI_E_INCREMENT:HMI_E_DECREMENT;
 		break;
 	case GP_AUX_0:									// Enter
+		if (events&GPIO_IRQ_EDGE_FALL)
+			evt = HMI_E_ENTER;
 		break;
 	case GP_AUX_1:									// Escape
+		if (events&GPIO_IRQ_EDGE_FALL)
+			evt = HMI_E_ESCAPE;
 		break;
 	case GP_AUX_2:									// Previous
+		if (events&GPIO_IRQ_EDGE_FALL)
+			evt = HMI_E_LEFT;
 		break;
 	case GP_AUX_3:									// Next
+		if (events&GPIO_IRQ_EDGE_FALL)
+			evt = HMI_E_RIGHT;
 		break;
 	case GP_PTT:									// PTT
 		if (events&GPIO_IRQ_EDGE_FALL)
 			dsp_ptt(true);
 		else
 			dsp_ptt(false);
-		printf("PTT\n");
-		break;
+		return;
 	default:
-		break;
+		return;
 	}
+	
+	hmi_handler(evt);
 }
 
-
+/*
+ * Initialize the User interface
+ */
 void hmi_init(void)
 {
 	/*
@@ -207,16 +293,53 @@ void hmi_init(void)
 	lcd_clear();
 	
 	hmi_state = HMI_S_TUNE;
-	hmi_sub = 1;
-	hmi_option = 1;
-	hmi_mode = 0;
-	hmi_agc = 0;
-	hmi_pre = 0;
+	hmi_option = 4;									// kHz digit
 	hmi_freq = 7074000UL;
 	
 	hmi_evaluate();
 
 	SI_SETFREQ(0, 2*hmi_freq);						// Set freq to 2*7074 kHz
 	SI_SETPHASE(0, 2);								// Set phase to 180deg
+}
+
+/*
+ * Redraw the LCD, representing current state
+ */
+void hmi_evaluate(void)
+{
+	char s[20];
+	
+	sprintf(s, "%s %7.1f  %3d", hmi_o_mode[hmi_sub[HMI_S_MODE]], (double)hmi_freq/1000.0, 920);
+	lcd_writexy(0,0,s);
+	switch (hmi_state)
+	{
+	case HMI_S_MENU:
+		sprintf(s, "=> %s         ", hmi_o_menu[hmi_option]);
+		lcd_writexy(0,1,s);	
+		lcd_curxy(2, 1, false);
+		break;
+	case HMI_S_TUNE:
+		sprintf(s, "%s   %s  %s", hmi_o_menu[HMI_S_TUNE], hmi_o_pre[hmi_sub[HMI_S_PRE]], hmi_o_agc[hmi_sub[HMI_S_AGC]]);
+		lcd_writexy(0,1,s);	
+		lcd_curxy(4+(hmi_option>4?6:hmi_option), 0, true);
+		break;
+	case HMI_S_MODE:
+		sprintf(s, "=> Mode: %s         ", hmi_o_mode[hmi_option]);
+		lcd_writexy(0,1,s);	
+		lcd_curxy(9, 1, false);
+		break;
+	case HMI_S_AGC:
+		sprintf(s, "=> AGC: %s        ", hmi_o_agc[hmi_option]);
+		lcd_writexy(0,1,s);	
+		lcd_curxy(8, 1, false);
+		break;
+	case HMI_S_PRE:
+		sprintf(s, "=> Pre: %s         ", hmi_o_pre[hmi_option]);
+		lcd_writexy(0,1,s);	
+		lcd_curxy(8, 1, false);
+		break;
+	default:
+		break;
+	}
 }
 

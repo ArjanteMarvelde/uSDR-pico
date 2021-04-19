@@ -155,7 +155,6 @@ void lcd_init(void)
 	sleep_us(LCD_DELAY);
 }
 
-
 void lcd_clear(void)
 {
 	uint8_t txdata[3];
