@@ -1,5 +1,6 @@
 # uSDR-pico
-uSDR implementation based on a RP2040 Pi Pico
+A uSDR implementation based on a RP2040 Pi Pico
+This code is experimental, intended to investigate how the HW and SDK work with an application like this. So download and play with it, ask questions and  suggest improvements, but do not expect any kind of "product" support. 
 
 This is the repository for an experimental implementation of the control and signal processing for a QSD/QSE based transceiver. The platform used is a Pi Pico module with an RP2040 processor. This processor has dual core, running at 125MHz each and very configurable I/O which eases the HW design.
 
