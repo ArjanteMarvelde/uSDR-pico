@@ -133,7 +133,7 @@ void hmi_handler(uint8_t event)
 		if (event==HMI_E_ENTER)
 		{
 			hmi_sub[hmi_state] = hmi_option;							// Store option
-			SI_SETFREQ(0, 2*hmi_freq);									// Commit frequency
+			SI_SETFREQ(0, 2*hmi_freq);									// Commit frequency (x2 due to HW used)
 		}
 		if (event==HMI_E_ESCAPE)
 		{
@@ -290,13 +290,9 @@ void hmi_init(void)
 	gpio_set_irq_enabled_with_callback(GP_ENC_A, GPIO_IRQ_EDGE_ALL, true, hmi_callback);
 		
 	// Initialize LCD and set VFO
-	lcd_clear();
-	
 	hmi_state = HMI_S_TUNE;
-	hmi_option = 4;									// kHz digit
-	hmi_freq = 7074000UL;
-	
-	hmi_evaluate();
+	hmi_option = 4;									// Active kHz digit
+	hmi_freq = 7074000UL;							// Initial frequency
 
 	SI_SETFREQ(0, 2*hmi_freq);						// Set freq to 2*7074 kHz
 	SI_SETPHASE(0, 2);								// Set phase to 180deg

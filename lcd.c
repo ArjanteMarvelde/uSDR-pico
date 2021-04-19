@@ -153,6 +153,11 @@ void lcd_init(void)
 	txdata[1] = LCD_DISPLAYCONTROL | LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF;
 	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
 	sleep_us(LCD_DELAY);
+	
+	/* Display clear once more */
+	txdata[1] = LCD_CLEARDISPLAY;
+	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	sleep_us(1530);
 }
 
 void lcd_clear(void)
