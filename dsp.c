@@ -34,6 +34,8 @@
 #include "hardware/timer.h"
 #include "hardware/clocks.h"
 
+#define ADC0_IRQ_FIFO 22
+
 #include "dsp.h"
 
 /* 
@@ -73,34 +75,51 @@ int16_t lpf7_31[15] =  { -1,  4,  9,  2,-12, -2, 40, 66, 40, -2,-12,  2,  9,  4,
 int16_t lpf15_62[15] = { -1,  3, 12,  6,-12, -4, 40, 69, 40, -4,-12,  6, 12,  3, -1};	// Pass: 0-15000, Stop: 20000-31250
 
 volatile uint16_t dac_iq, dac_audio;
+volatile uint32_t fifo_overrun;
 volatile bool tx_enabled;
 
 void dsp_ptt(bool active)
 {
 	tx_enabled = active;
 }
+
+
+/* 
+ * CORE1: 
+ * ADC IRQ handler.
+ * Fills the results array in RR fashion, for 3 channels (~2usec per channel).
+ */
+volatile uint16_t adc_result[3];
+volatile int adc_next;								// Remember which ADC the result is from
+uint32_t adc_count=0;
+void adcfifo_handler(void)
+{
+	adc_result[adc_next] = adc_fifo_get();
+	adc_next = adc_hw->cs;
+	adc_next = (adc_next >> ADC_CS_AINSEL_LSB) & 3;	// Only 0, 1 and  are valid
+	adc_count++;
+}
 	
 
 /* 
  * CORE1: 
- * Execute RX branch signal processing
- * No interleaving, since only 2us per conversion
+ * Execute RX branch signal processing, max time to spend is <16us !
+ * No ADC sample interleaving, take both I and Q channels.
+ * The delay is only 2us per conversion, which causes less distortion than interpolation of samples.
  */
 volatile int16_t i_s_raw[15], q_s_raw[15];			// Raw I/Q samples minus DC bias
 volatile int16_t i_s[15], q_s[15];					// Filtered I/Q samples
 volatile int16_t i_dc, q_dc; 						// DC bias for I/Q channel
-volatile int dec_cnt=0;								// Decimation counter
+volatile int rx_cnt=0;								// Decimation counter
 bool rx(void) 
 {
 	int16_t q_sample, i_sample;
 	int32_t q_accu, i_accu;
 	int16_t qh;
 	int i;
-		
-	adc_select_input(1);							// Q channel ADC 
-	q_sample = (int16_t)adc_read();					// Take Q sample
-	adc_select_input(0);							// I channel ADC 
-	i_sample = (int16_t)adc_read();					// Take I sample
+
+	i_sample = adc_result[0];						// Take last ADC 0 result
+	q_sample = adc_result[1];						// Take last ADC 1 result
 
 	/* 
 	 * Shift in I and Q raw samples 
@@ -113,32 +132,27 @@ bool rx(void)
 		
 	/*
 	 * Remove DC and store new sample
-	 //Other algo: y[i] = alpha * x[i] + (1-alpha) * y[i-1]
-	 *  w(t) = x(t) + a*w(t-1) (use a=7/8, ca 0.87)
-	 *  y(t) = w(t) - w(t-1) 
+	 * IIR filter: dc = a*sample + (1-a)*dc  where a = 1/128
 	 */
-//	q_sample += (((q_dc<<3)-q_dc)>>3);				// Use sample as temporary q_dc
-//	q_s_raw[14] = q_sample - q_dc;					// Calculate output
-//	q_dc = q_sample;								// Store new q_dc
-	q_s_raw[14] = (q_sample&0x0fff) - ADC_BIAS; 		//     just clip and subtract mid-level
-		
-//	-_sample += (((i_dc<<3)-i_dc)>>3);				// Use sample as temporary i_dc
-//	i_s_raw[14] = i_sample - i_dc;					// Calculate output
-//	i_dc = i_sample;								// Store new i_dc
-	i_s_raw[14] = (i_sample&0x0fff) - ADC_BIAS; 		//     just clip and subtract mid-level
+	q_sample = (q_sample&0x0fff) - ADC_BIAS;		// Clip and subtract mid-range
+	q_dc = (q_sample>>7) + q_dc - (q_dc>>7);		//   then IIR running average
+	q_s_raw[14] = q_sample - q_dc;					//   and subtract DC, store in shift register
+	i_sample = (i_sample&0x0fff) - ADC_BIAS;
+	i_dc = (i_sample>>7) + i_dc - (i_dc>>7);
+	i_s_raw[14] = i_sample - i_dc;
 		
 	/*
 	 * Low pass filter + decimation
 	 */
-	dec_cnt = (dec_cnt+1)&0x03;						// Use only every fourth sample
-	if (dec_cnt>0) return true;
+	rx_cnt = (rx_cnt+1)&0x03;						// Calculate only every fourth sample
+	if (rx_cnt>0) return true;
 	
-	for (i=0; i<14; i++) 							// Shift samples
+	for (i=0; i<14; i++) 							// Shift decimated samples
 	{
 		q_s[i] = q_s[i+1];
 		i_s[i] = i_s[i+1];
 	}
-	q_accu = 0;
+	q_accu = 0;										// Initialize accumulator
 	i_accu = 0;
 	for (i=0; i<15; i++)							// Low pass FIR filter
 	{
@@ -147,6 +161,11 @@ bool rx(void)
 	}
 	q_s[14] = q_accu >> 8;
 	i_s[14] = q_accu >> 8;
+
+	/*
+	 * From here things get dependent on receive mode.
+	 * We assume USB for now, e.g. supporting FT8
+	 */
 
 	/* 
 	 * Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills)
@@ -158,26 +177,26 @@ bool rx(void)
 	 * SSB demodulate: I[7] - Qh
 	 * Add DAC_BIAS offset, Clip to DAC_RANGE and send to audio DAC output
 	 */
-	q_sample = ((i_s[7] - qh)/8)+DAC_BIAS;
+	q_sample = ((i_s[7] - qh)/2)+DAC_BIAS;
 	q_sample = (q_sample>DAC_RANGE)?DAC_RANGE:((q_sample<0)?0:q_sample);
 	pwm_set_chan_level(dac_audio, PWM_CHAN_A, q_sample);
 
 
 /* AGC ALGORITHM
-if(m_Peak>m_AttackAve) 																//if power is rising (use m_AttackRiseAlpha time constant)
+if(m_Peak>m_AttackAve) 								//if power is rising (use m_AttackRiseAlpha time constant)
 	m_AttackAve = (1.0-m_AttackRiseAlpha)*m_AttackAve + m_AttackRiseAlpha*m_Peak;
-else 																				//else magnitude is falling (use m_AttackFallAlpha time constant)
+else 												//else magnitude is falling (use m_AttackFallAlpha time constant)
 	m_AttackAve = (1.0-m_AttackFallAlpha)*m_AttackAve + m_AttackFallAlpha*m_Peak;
-if(m_Peak>m_DecayAve) 																//if magnitude is rising (use m_DecayRiseAlpha time constant)
+if(m_Peak>m_DecayAve) 								//if magnitude is rising (use m_DecayRiseAlpha time constant)
 {
 	m_DecayAve = (1.0-m_DecayRiseAlpha)*m_DecayAve + m_DecayRiseAlpha*m_Peak;
-	m_HangTimer = 0; 																//reset hang timer
+	m_HangTimer = 0; 								//reset hang timer
 }
 else
-{ 																					//here if decreasing signal
+{ 													//here if decreasing signal
 if(m_HangTimer<m_HangTime)
-	m_HangTimer++; 																	//just inc and hold current m_DecayAve
-else 																				//else decay with m_DecayFallAlpha which is RELEASE_TIMECONST
+	m_HangTimer++; 									//just inc and hold current m_DecayAve
+else 												//else decay with m_DecayFallAlpha which is RELEASE_TIMECONST
 	m_DecayAve = (1.0-m_DecayFallAlpha)*m_DecayAve + m_DecayFallAlpha*m_Peak;
 }
 */
@@ -189,55 +208,58 @@ else 																				//else decay with m_DecayFallAlpha which is RELEASE_TIM
  * CORE1: 
  * Execute TX branch signal processing
  */
-volatile int16_t a_s_pre[15]; 						// Raw samples, minus DC bias
+volatile int16_t a_s_raw[15]; 						// Raw samples, minus DC bias
 volatile int16_t a_s[15];							// Filtered and decimated samples
 volatile int16_t a_dc;								// DC level
+volatile int tx_cnt=0;								// Decimation counter
 bool tx(void) 
 {
 	static int tx_phase = 0;
-	int16_t sample;
-	int32_t accu;
+	int16_t a_sample;
+	int32_t a_accu;
 	int16_t qh;
 	int i;
 		
 	/*
 	 * Get sample and shift into delay line
 	 */
-	adc_select_input(2);							// Audio channel ADC 
+	a_sample = adc_result[2];						// Take last ADC 0 result
+	
 	for (i=0; i<14; i++) 
-		a_s_pre[i] = a_s_pre[i+1];					// Audio samples delay line
-	a_s_pre[14] = (int16_t)adc_read()-ADC_RANGE/2;	// Subtract half range (is appr. dc bias)
-	
-	tx_phase = (tx_phase+1)&0x01;					// Count to 2
-	if (tx_phase != 0)								// 
-		return true;								//   early bail out 1 out of 2 times
-	
-	/*
-	 * Downsample and low pass
-	 */
-	for (i=0; i<14; i++) 							// Shift decimated samples
-		a_s[i] = a_s[i+1];
-	accu = 0;
-	for (i=0; i<15; i++)							// Low pass FIR filter
-		accu += (int32_t)a_s_pre[i]*lpf3_62[i];		// 3kHz, at 62.5 kHz sampling
-	a_s[14] = accu / 256;
+		a_s_raw[i] = a_s_raw[i+1];					// Audio raw samples shift register
 
-	
 	/*
 	 * Remove DC and store new sample
-	 *  w(t) = x(t) + a*w(t-1) (use a=31/32, ca 0.97)
-	 *  y(t) = w(t) - w(t-1) 
+	 * IIR filter: dc = a*sample + (1-a)*dc  where a = 1/128
 	 */
-	//temp = a_dc;									// a_dc is w(t-1)
-	//sample += (int16_t)(((temp<<5)-temp)>>5);		// Use sample as w(t)
-	//a_s[14] = sample - a_dc;						// Calculate output
-	//a_dc = sample;								// Store new w(t)
+	a_sample = (a_sample&0x0fff) - ADC_BIAS;		// Clip and subtract mid-range
+	a_dc = (a_sample>>7) + a_dc - (a_dc>>7);		//   then IIR running average
+	a_s_raw[14] = a_sample - a_dc;					//   and subtract DC, store in shift register
+
+	/*
+	 * Low pass filter + decimation
+	 */
+	tx_cnt = (tx_cnt+1)&0x03;						// Calculate only every fourth sample
+	if (tx_cnt>0) return true;
+	
+	for (i=0; i<14; i++) 							// Shift decimated samples
+		a_s[i] = a_s[i+1];
+
+	a_accu = 0;										// Initialize accumulator
+	for (i=0; i<15; i++)							// Low pass FIR filter
+		a_accu += (int32_t)a_s_raw[i]*lpf3_62[i];	// Fc=3kHz, at 62.5 kHz sampling		
+	a_s[14] = a_accu >> 8;
+
+	/*
+	 * From here things get dependent on transmit mode.
+	 * We assume USB for now, e.g. supporting FT8
+	 */
 		
 	/* 
 	 * Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills):
 	 */	
-	accu = (a_s[0]-a_s[14])*315L + (a_s[2]-a_s[12])*440L + (a_s[4]-a_s[10])*734L + (a_s[6]-a_s[ 8])*2202L;
-	qh = accu / 4096;	 
+	a_accu = (a_s[0]-a_s[14])*315L + (a_s[2]-a_s[12])*440L + (a_s[4]-a_s[10])*734L + (a_s[6]-a_s[ 8])*2202L;
+	qh = a_accu / 4096;	 
 
 	/* 
 	 * Write I and Q to QSE DACs, phase is 7 back.
@@ -257,43 +279,11 @@ bool tx(void)
 void dsp_loop()
 {
 	uint32_t cmd;
-	
-    while(1) 
-	{
-        cmd = multicore_fifo_pop_blocking();		// Wait for fifo output
-		if (cmd == DSP_TX)							// Change to switch(cmd) when more commands added
-			tx();
-		else
-			rx();
-    }
-}
-
-
-/* 
- * CORE0: 
- * Timer callback, triggers core1 through inter-core fifo.
- * Either TX or RX, but could do both when testing in loopback on I+Q channels.
- */
-struct repeating_timer dsp_timer;
-bool dsp_callback(struct repeating_timer *t) 
-{
-	if (tx_enabled)
-		multicore_fifo_push_blocking(DSP_TX);		// Write TX in fifo to core 1
-	else
-		multicore_fifo_push_blocking(DSP_RX);		// Write RX in fifo to core 1
-	
-	return true;
-}
-
-
-/* 
- * CORE0: 
- * Initialize dsp context and spawn core1 process 
- */
-void dsp_init() 
-{
 	uint16_t slice_num;
 	
+	tx_enabled = false;
+	fifo_overrun = 0;	
+
 	/* Initialize DACs */
 	gpio_set_function(20, GPIO_FUNC_PWM);			// GP20 is PWM for I DAC (Slice 2, Channel A)
 	gpio_set_function(21, GPIO_FUNC_PWM);			// GP21 is PWM for Q DAC (Slice 2, Channel B)
@@ -309,14 +299,54 @@ void dsp_init()
 	pwm_set_enabled(dac_audio, true); 				// Set the PWM running
 
 	/* Initialize ADCs */
-	adc_init();
+	adc_init();										// Initialize ADC to known state
+	adc_set_clkdiv(0);								// Fastest clock (500 kSps)
 	adc_gpio_init(26);								// GP26 is ADC 0 for I channel
 	adc_gpio_init(27);								// GP27 is ADC 1 for Q channel
 	adc_gpio_init(28);								// GP28 is ADC 2 for Audio channel
-	adc_select_input(0);							// Select ADC 0 
+	adc_select_input(0);							// Start with ADC0
+	adc_next = 0;
+	
+	adc_set_round_robin(1+2+4);						// Sequence ADC 0-1-2 free running
+	adc_fifo_setup(true,false,1,false,false);		// IRQ for everty result (threshold = 1)
+    irq_set_exclusive_handler(ADC0_IRQ_FIFO, adcfifo_handler);
+	adc_irq_set_enabled(true);
+	irq_set_enabled(ADC0_IRQ_FIFO, true);
+	adc_run(true);
+	
+    while(1) 
+	{
+		if (multicore_fifo_rvalid()) fifo_overrun++;// Check for missed events
+        cmd = multicore_fifo_pop_blocking();		// Wait for fifo output
+		if (cmd == DSP_RX) rx();	
+		if (cmd == DSP_TX) tx();
+    }
+}
 
-	tx_enabled = false;								// RX mode
 
+/* 
+ * CORE0: 
+ * Timer callback, triggers core1 through inter-core fifo.
+ * Either TX or RX, but could do both when testing in loopback on I+Q channels.
+ */
+struct repeating_timer dsp_timer;
+bool dsp_callback(struct repeating_timer *t) 
+{
+	if (tx_enabled)
+		multicore_fifo_push_blocking(DSP_TX);		// Send TX to core 1 through fifo 
+	else
+		multicore_fifo_push_blocking(DSP_RX);		// Send RX to core 1 through fifo
+	
+	return true;
+}
+
+
+/* 
+ * CORE0: 
+ * Initialize dsp context and spawn core1 process 
+ */
+void dsp_init() 
+{
     multicore_launch_core1(dsp_loop);				// Start processing on core1
 	add_repeating_timer_us(-DSP_US, dsp_callback, NULL, &dsp_timer);
 }

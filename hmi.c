@@ -110,6 +110,13 @@ uint32_t hmi_step[6] = {10000000, 1000000, 100000, 10000, 1000, 100};	// Frequen
 #define HMI_MAXFREQ		30000000
 #define HMI_MINFREQ		     100
 
+#ifndef MIN
+#define MIN(x, y)        ((x)<(y)?(x):(y))  // Get min value
+#endif
+#ifndef MAX
+#define MAX(x, y)        ((x)>(y)?(x):(y))  // Get max value
+#endif
+
 /*
  * Finite State Machine,
  * Handle event according to current state
@@ -120,9 +127,9 @@ void hmi_handler(uint8_t event)
 	{
 	case HMI_S_MENU:
 		if ((event==HMI_E_INCREMENT)||(event==HMI_E_RIGHT))
-			hmi_option = (hmi_option<HMI_NSTATES-1)?hmi_option+1:1;
+			hmi_option = (hmi_option<HMI_NSTATES-1)?hmi_option+1:HMI_NSTATES-1;
 		if ((event==HMI_E_DECREMENT)||(event==HMI_E_LEFT))
-			hmi_option = (hmi_option>1)?hmi_option-1:HMI_NSTATES-1;
+			hmi_option = (hmi_option>1)?hmi_option-1:0;
 		if (event==HMI_E_ENTER)
 		{
 			hmi_state = hmi_option;										// Enter new submenu
@@ -143,18 +150,15 @@ void hmi_handler(uint8_t event)
 		}
 		if (event==HMI_E_INCREMENT)
 		{
-			hmi_freq += hmi_step[hmi_option];
-			if (hmi_freq > HMI_MAXFREQ) hmi_freq = HMI_MAXFREQ;
+			hmi_freq+= hmi_step[hmi_option];
+			hmi_freq = MIN(hmi_freq , HMI_MAXFREQ);
 		}
 		if (event==HMI_E_DECREMENT)
-		{
-			hmi_freq -= hmi_step[hmi_option];
-			if (hmi_freq < HMI_MINFREQ) hmi_freq = HMI_MINFREQ;
-		}
+			hmi_freq = (hmi_freq>hmi_step[hmi_option]+HMI_MINFREQ)?hmi_freq-hmi_step[hmi_option]:HMI_MINFREQ;
 		if (event==HMI_E_RIGHT)
-			hmi_option = (hmi_option<6)?hmi_option+1:0;
+			hmi_option = (hmi_option<6)?hmi_option+1:6;
 		if (event==HMI_E_LEFT)
-			hmi_option = (hmi_option>0)?hmi_option-1:6;
+			hmi_option = (hmi_option>0)?hmi_option-1:0;
 		break;	
 	case HMI_S_MODE:
 		if (event==HMI_E_ENTER)
@@ -170,9 +174,9 @@ void hmi_handler(uint8_t event)
 			hmi_state = HMI_S_MENU;										// Leave submenu
 		}
 		if ((event==HMI_E_INCREMENT)||(event==HMI_E_RIGHT))
-			hmi_option = (hmi_option<HMI_NMODE-1)?hmi_option+1:0;
+			hmi_option = (hmi_option<HMI_NMODE-1)?hmi_option+1:HMI_NMODE-1;
 		if ((event==HMI_E_DECREMENT)||(event==HMI_E_LEFT))
-			hmi_option = (hmi_option>0)?hmi_option-1:HMI_NMODE-1;
+			hmi_option = (hmi_option>0)?hmi_option-1:0;
 		break;
 	case HMI_S_AGC:
 		if (event==HMI_E_ENTER)
@@ -188,9 +192,9 @@ void hmi_handler(uint8_t event)
 			hmi_state = HMI_S_MENU;										// Leave submenu
 		}
 		if ((event==HMI_E_INCREMENT)||(event==HMI_E_RIGHT))
-			hmi_option = (hmi_option<HMI_NAGC-1)?hmi_option+1:0;
+			hmi_option = (hmi_option<HMI_NAGC-1)?hmi_option+1:HMI_NAGC-1;
 		if ((event==HMI_E_DECREMENT)||(event==HMI_E_LEFT))
-			hmi_option = (hmi_option>0)?hmi_option-1:HMI_NAGC-1;
+			hmi_option = (hmi_option>0)?hmi_option-1:0;
 		break;
 	case HMI_S_PRE:
 		if (event==HMI_E_ENTER)
@@ -206,9 +210,9 @@ void hmi_handler(uint8_t event)
 			hmi_state = HMI_S_MENU;										// Leave submenu
 		}
 		if ((event==HMI_E_INCREMENT)||(event==HMI_E_RIGHT))
-			hmi_option = (hmi_option<HMI_NPRE-1)?hmi_option+1:0;
+			hmi_option = (hmi_option<HMI_NPRE-1)?hmi_option+1:HMI_NPRE-1;
 		if ((event==HMI_E_DECREMENT)||(event==HMI_E_LEFT))
-			hmi_option = (hmi_option>0)?hmi_option-1:HMI_NPRE-1;
+			hmi_option = (hmi_option>0)?hmi_option-1:0;
 		break;
 	}
 }
@@ -337,5 +341,6 @@ void hmi_evaluate(void)
 	default:
 		break;
 	}
+	SI_SETFREQ(0, 2*hmi_freq);						// Set freq to latest 
 }
 

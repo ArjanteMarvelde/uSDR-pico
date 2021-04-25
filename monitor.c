@@ -28,12 +28,13 @@ char mon_cmd[CMD_LEN+1];
 
 uint8_t si5351_reg[200];
 bool ptt = false;
-
+extern volatile uint32_t fifo_overrun;
+extern uint32_t adc_count;
 
 /* Commandstring parser */
 char delim[] = " ";
-#define NCMD	4
-char shell[NCMD][3] = {"si", "lt", "fb", "pt"};
+#define NCMD	5
+char shell[NCMD][3] = {"si", "lt", "fo", "pt", "ad"};
 void mon_parse(char* s)
 {
 	char *p;
@@ -56,7 +57,7 @@ void mon_parse(char* s)
 		lcd_test();
 		break;
 	case 2:
-		printf("%s\n", p);
+		printf("Fifo overruns: %lu\n", fifo_overrun);
 		break;
 	case 3:
 		if (ptt)
@@ -71,6 +72,9 @@ void mon_parse(char* s)
 		}
 		dsp_ptt(ptt);
 		break;
+	case 4:
+		printf("ADC IRQ count: %lu\n", adc_count);
+		break;	
 	default:
 		printf("??\n");
 		break;
