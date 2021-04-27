@@ -65,7 +65,7 @@
 /* 
  * Low pass filters Fc=3, 7 and 15 kHz (see http://t-filter.engineerjs.com/)
  * for sample rates 62.500 , 31.250 or 15.625 kHz , stopband is appr -40dB
- * 8 bit precision, so divide sum by 256 
+ * Note: 8 bit precision, so divide sum by 256 
  */
 int16_t lpf3_62[15] =  {  3,  3,  5,  7,  9, 10, 11, 11, 11, 10,  9,  7,  5,  3,  3};	// Pass: 0-3000, Stop: 6000-31250
 int16_t lpf3_31[15] =  { -2, -3, -3,  1, 10, 21, 31, 35, 31, 21, 10,  1, -3, -3, -2};	// Pass: 0-3000, Stop: 6000-15625
@@ -75,9 +75,12 @@ int16_t lpf7_31[15] =  { -1,  4,  9,  2,-12, -2, 40, 66, 40, -2,-12,  2,  9,  4,
 int16_t lpf15_62[15] = { -1,  3, 12,  6,-12, -4, 40, 69, 40, -4,-12,  6, 12,  3, -1};	// Pass: 0-15000, Stop: 20000-31250
 
 volatile uint16_t dac_iq, dac_audio;
-volatile uint32_t fifo_overrun;
+volatile uint32_t fifo_overrun, fifo_rx, fifo_tx, fifo_xx, fifo_incnt;
 volatile bool tx_enabled;
 
+/*
+ * Interface method to (de-)assert PTT
+ */
 void dsp_ptt(bool active)
 {
 	tx_enabled = active;
@@ -135,16 +138,16 @@ bool rx(void)
 	 * IIR filter: dc = a*sample + (1-a)*dc  where a = 1/128
 	 */
 	q_sample = (q_sample&0x0fff) - ADC_BIAS;		// Clip and subtract mid-range
-	q_dc = (q_sample>>7) + q_dc - (q_dc>>7);		//   then IIR running average
+	q_dc += (q_sample>>7) - (q_dc>>7);				//   then IIR running average
 	q_s_raw[14] = q_sample - q_dc;					//   and subtract DC, store in shift register
 	i_sample = (i_sample&0x0fff) - ADC_BIAS;
-	i_dc = (i_sample>>7) + i_dc - (i_dc>>7);
+	i_dc += (i_sample>>7) - (i_dc>>7);
 	i_s_raw[14] = i_sample - i_dc;
 		
 	/*
 	 * Low pass filter + decimation
 	 */
-	rx_cnt = (rx_cnt+1)&0x03;						// Calculate only every fourth sample
+	rx_cnt = (rx_cnt+1)&3;							// Calculate only every fourth sample
 	if (rx_cnt>0) return true;
 	
 	for (i=0; i<14; i++) 							// Shift decimated samples
@@ -152,7 +155,7 @@ bool rx(void)
 		q_s[i] = q_s[i+1];
 		i_s[i] = i_s[i+1];
 	}
-	q_accu = 0;										// Initialize accumulator
+	q_accu = 0;										// Initialize accumulators
 	i_accu = 0;
 	for (i=0; i<15; i++)							// Low pass FIR filter
 	{
@@ -223,7 +226,7 @@ bool tx(void)
 	/*
 	 * Get sample and shift into delay line
 	 */
-	a_sample = adc_result[2];						// Take last ADC 0 result
+	a_sample = adc_result[2];						// Take last ADC 2 result
 	
 	for (i=0; i<14; i++) 
 		a_s_raw[i] = a_s_raw[i+1];					// Audio raw samples shift register
@@ -239,7 +242,7 @@ bool tx(void)
 	/*
 	 * Low pass filter + decimation
 	 */
-	tx_cnt = (tx_cnt+1)&0x03;						// Calculate only every fourth sample
+	tx_cnt = (tx_cnt+1)&3;							// Calculate only every fourth sample
 	if (tx_cnt>0) return true;
 	
 	for (i=0; i<14; i++) 							// Shift decimated samples
@@ -283,6 +286,10 @@ void dsp_loop()
 	
 	tx_enabled = false;
 	fifo_overrun = 0;	
+	fifo_rx = 0;	
+	fifo_tx = 0;	
+	fifo_xx = 0;
+	fifo_incnt++;
 
 	/* Initialize DACs */
 	gpio_set_function(20, GPIO_FUNC_PWM);			// GP20 is PWM for I DAC (Slice 2, Channel A)
@@ -308,19 +315,34 @@ void dsp_loop()
 	adc_next = 0;
 	
 	adc_set_round_robin(1+2+4);						// Sequence ADC 0-1-2 free running
-	adc_fifo_setup(true,false,1,false,false);		// IRQ for everty result (threshold = 1)
+	adc_fifo_setup(true,false,1,false,false);		// IRQ for every result (threshold = 1)
     irq_set_exclusive_handler(ADC0_IRQ_FIFO, adcfifo_handler);
 	adc_irq_set_enabled(true);
 	irq_set_enabled(ADC0_IRQ_FIFO, true);
 	adc_run(true);
 	
+	// Consider using alarm_pool_add_repeating_timer_us() for a core1 associated timer
+	// First create an alarm pool on core1: alarm_pool_create(HWalarm, Ntimers)
+	// For the core1 alarm pool don't use default HWalarm (usually 3) but e.g. 1
+	
     while(1) 
 	{
-		if (multicore_fifo_rvalid()) fifo_overrun++;// Check for missed events
         cmd = multicore_fifo_pop_blocking();		// Wait for fifo output
-		if (cmd == DSP_RX) rx();	
-		if (cmd == DSP_TX) tx();
-    }
+		if (cmd == DSP_RX) 
+		{
+			fifo_rx++;
+			rx();
+		}
+		else if (cmd == DSP_TX)
+		{
+			fifo_tx++;
+			tx();
+		}
+		else
+			fifo_xx++;
+ 		if (multicore_fifo_rvalid()) 
+			fifo_overrun++;							// Check for missed events
+   }
 }
 
 
@@ -336,7 +358,7 @@ bool dsp_callback(struct repeating_timer *t)
 		multicore_fifo_push_blocking(DSP_TX);		// Send TX to core 1 through fifo 
 	else
 		multicore_fifo_push_blocking(DSP_RX);		// Send RX to core 1 through fifo
-	
+	fifo_incnt++;
 	return true;
 }
 

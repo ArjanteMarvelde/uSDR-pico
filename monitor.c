@@ -28,7 +28,7 @@ char mon_cmd[CMD_LEN+1];
 
 uint8_t si5351_reg[200];
 bool ptt = false;
-extern volatile uint32_t fifo_overrun;
+extern volatile uint32_t fifo_overrun, fifo_rx, fifo_tx, fifo_xx, fifo_incnt;
 extern uint32_t adc_count;
 
 /* Commandstring parser */
@@ -57,6 +57,10 @@ void mon_parse(char* s)
 		lcd_test();
 		break;
 	case 2:
+		printf("Fifo input: %lu\n", fifo_incnt);
+		printf("Fifo rx: %lu\n", fifo_rx);
+		printf("Fifo tx: %lu\n", fifo_tx);
+		printf("Fifo unknown: %lu\n", fifo_xx);
 		printf("Fifo overruns: %lu\n", fifo_overrun);
 		break;
 	case 3:
