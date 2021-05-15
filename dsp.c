@@ -78,13 +78,7 @@ volatile uint16_t dac_iq, dac_audio;
 volatile uint32_t fifo_overrun, fifo_rx, fifo_tx, fifo_xx, fifo_incnt;
 volatile bool tx_enabled;
 
-/*
- * Interface method to (de-)assert PTT
- */
-void dsp_ptt(bool active)
-{
-	tx_enabled = active;
-}
+
 
 
 /* 
@@ -262,14 +256,14 @@ bool tx(void)
 	 * Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills):
 	 */	
 	a_accu = (a_s[0]-a_s[14])*315L + (a_s[2]-a_s[12])*440L + (a_s[4]-a_s[10])*734L + (a_s[6]-a_s[ 8])*2202L;
-	qh = a_accu / 4096;	 
+	qh = (int16_t)(a_accu >> 12);	 
 
 	/* 
 	 * Write I and Q to QSE DACs, phase is 7 back.
 	 * Need to multiply AC with DAC_RANGE/ADC_RANGE (appr 1/16, but compensate for losses)
 	 */
-	pwm_set_chan_level(dac_iq, PWM_CHAN_A, DAC_BIAS + (a_s[7]/8));
-	pwm_set_chan_level(dac_iq, PWM_CHAN_B, DAC_BIAS + (qh/8));
+	pwm_set_chan_level(dac_iq, PWM_CHAN_A, DAC_BIAS + (a_s[7]/4));
+	pwm_set_chan_level(dac_iq, PWM_CHAN_B, DAC_BIAS + (qh/4));
 
 	return true;
 }

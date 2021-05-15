@@ -13,9 +13,9 @@
 #include "hardware/adc.h"
 #include "hardware/pwm.h"
 
-
+extern volatile bool tx_enabled;
 void dsp_init();
-void dsp_ptt(bool active);
+
 
 
 #endif

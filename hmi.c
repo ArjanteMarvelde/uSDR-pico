@@ -248,9 +248,9 @@ void hmi_callback(uint gpio, uint32_t events)
 		break;
 	case GP_PTT:									// PTT
 		if (events&GPIO_IRQ_EDGE_FALL)
-			dsp_ptt(true);
+			tx_enabled = true;
 		else
-			dsp_ptt(false);
+			tx_enabled = false;
 		return;
 	default:
 		return;
@@ -298,8 +298,8 @@ void hmi_init(void)
 	hmi_option = 4;									// Active kHz digit
 	hmi_freq = 7074000UL;							// Initial frequency
 
-	SI_SETFREQ(0, 2*hmi_freq);						// Set freq to 2*7074 kHz
-	SI_SETPHASE(0, 2);								// Set phase to 180deg
+	SI_SETFREQ(0, hmi_freq);						// Set freq to 7074 kHz
+	SI_SETPHASE(0, 1);								// Set phase to 90deg
 }
 
 /*
@@ -309,7 +309,7 @@ void hmi_evaluate(void)
 {
 	char s[20];
 	
-	sprintf(s, "%s %7.1f  %3d", hmi_o_mode[hmi_sub[HMI_S_MODE]], (double)hmi_freq/1000.0, 920);
+	sprintf(s, "%s %7.1f %c%3d", hmi_o_mode[hmi_sub[HMI_S_MODE]], (double)hmi_freq/1000.0, (tx_enabled?126:127),920);
 	lcd_writexy(0,0,s);
 	switch (hmi_state)
 	{
@@ -341,6 +341,7 @@ void hmi_evaluate(void)
 	default:
 		break;
 	}
-	SI_SETFREQ(0, 2*hmi_freq);						// Set freq to latest 
+	
+	SI_SETFREQ(0, hmi_freq);						// Set freq to latest 
 }
 
