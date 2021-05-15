@@ -42,7 +42,7 @@ Execute the installer to set up the SDK environment, e.g. in **~/Documents/Pico*
 Clone/copy the uSDR-pico code files into a subdirectory, e.g. **$PICO/uSDR-pico**  
 Create the build folder: **$PICO/uSDR-pico/build**  
 
-Before doing any building you need to adapt the file **$PICO/uSDR-pico/CMakeLists.txt**, using your favourite browser, to reflect your own directory structure.  
+Before doing any building you need to adapt the file **$PICO/uSDR-pico/CMakeLists.txt**, using your favourite browser, to reflect your own directory structure. Also, select whether you want **stdio** to use the UART on pins 1 and 2 or the USB serial port. The monitor terminal is on **stdio**.  
 In **$PICO/** you will find a command to start a Developer Command Prompt window. Within this DCP all environment settings are initialized to enable building.  
 In the DCP window, chdir to the build folder and execute: **cmake -G "NMake Makefiles" ..**  
 Now you have initialized the make environment, and by executing **nmake** in that same build folder, the Pi Pico loadable file **uSDR.uf2** is created.  
