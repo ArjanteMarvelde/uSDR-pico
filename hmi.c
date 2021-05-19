@@ -109,6 +109,7 @@ uint32_t hmi_freq;														// Frequency from Tune state
 uint32_t hmi_step[6] = {10000000, 1000000, 100000, 10000, 1000, 100};	// Frequency digit increments
 #define HMI_MAXFREQ		30000000
 #define HMI_MINFREQ		     100
+#define HMI_MULFREQ            1										// Factor between HMI and actual frequency
 
 #ifndef MIN
 #define MIN(x, y)        ((x)<(y)?(x):(y))  // Get min value
@@ -140,7 +141,7 @@ void hmi_handler(uint8_t event)
 		if (event==HMI_E_ENTER)
 		{
 			hmi_sub[hmi_state] = hmi_option;							// Store option
-			SI_SETFREQ(0, 2*hmi_freq);									// Commit frequency (x2 due to HW used)
+			SI_SETFREQ(0, HMI_MULFREQ*hmi_freq);						// Commit frequency
 		}
 		if (event==HMI_E_ESCAPE)
 		{
@@ -298,7 +299,7 @@ void hmi_init(void)
 	hmi_option = 4;									// Active kHz digit
 	hmi_freq = 7074000UL;							// Initial frequency
 
-	SI_SETFREQ(0, hmi_freq);						// Set freq to 7074 kHz
+	SI_SETFREQ(0, HMI_MULFREQ*hmi_freq);			// Set freq to 7074 kHz
 	SI_SETPHASE(0, 1);								// Set phase to 90deg
 }
 
