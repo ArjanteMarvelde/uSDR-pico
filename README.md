@@ -1,26 +1,26 @@
 # uSDR-pico
-A uSDR implementation based on a RP2040 Pi Pico.  
-This code is experimental, intended to investigate how the HW and SDK work with an application like this. So download and play with it, ask questions and  suggest improvements, but do not expect any kind of "product" support. 
+This Git repository contains a Micro-SDR implementation, based on a RP2040 Pi Pico. The project is highly experimental, foremost intended to investigate how the Pico HW and SDK work with an application like this. It contains the code for an experimental implementation of the control and signal processing for a QSD/QSE based transceiver. 
+Furthermore, the repository contains the electronic design of some modules that cover the mixing, filtering and RF amplification.
 
-This is the repository for an experimental implementation of the control and signal processing for a QSD/QSE based transceiver. The platform used is a Pi Pico module with an RP2040 processor. This processor has dual core, running at 125MHz each and very configurable I/O which eases the HW design.
-
-The software is distributed over two cores, core0 takes care of all user I/O and control functions, while core1 performs all signal processing. The core1 functionality consists of a TX-branch and an RX-branch, each called from a function that waits for inter-core FIFO words popping out. This happens every 16usec, because on core0 a 16usec timer callback ISR pushes the RX/TX status into that FIFO. Hence the signal processing rythm on core1 effectively is 62.5kHz.  
-On core1 the three ADC channels are continuously sampled at maximum speed in round-robin mode. Samples are therefore taken every 6usec for each channel, maximum delay between I and Q channels is 2usec, which has a negligible effect in the audio domain.  
+The platform used is a Pi Pico module with an RP2040 processor. This processor has dual cores, running at 125MHz each and very configurable I/O, which eases the HW design.
+The software is distributed over the two cores: core-0 takes care of all user I/O and control functions, while core-1 performs all of the signal processing. The core-1 functionality consists of a TX-branch and an RX-branch, each called from a function that waits for inter-core FIFO words popping out. This happens every 16usec, because on core-0 a 16usec timer callback ISR pushes the RX/TX status into that FIFO. Hence the signal processing rythm on core-1 effectively is 62.5kHz.  
+On core-1 the three ADC channels are continuously sampled at maximum speed in round-robin mode. Samples are therefore taken every 6usec for each channel, maximum jitter between I and Q channels is 4usec, which has a negligible effect in the audio domain.  
 
 The TX-branch 
-- takes lates audio audio sample input from ADC2 (rate = 62.5 kHz), 
+- takes latest audio audio sample input from ADC2 (rate = 62.5 kHz), 
 - applies a low-pass filter at Fc=3kHz, 
-- reduces sampling by 2 to get better low frequency response Hilbert xform (rate = 31.25 kHz), 
-- splits into an I-channel 7 sample delay line and a Q-channel 15-tap DHT
-- scales and outputs I and Q samples on PWM based DACs, towards QSE output
+- reduces sampling by 4 to get better low frequency response Hilbert xform (rate = 15.625 kHz), 
+- splits into an I-channel 7 sample delay line and a Q-channel 15-tap Discrete Hilbert Transform
+- scales, filters and outputs I and Q samples on PWM based DACs, towards QSE output
  
 The RX-branch
 - takes latest I and Q samples from QSD on ADC0 and ADC1 (rate = 62.5 kHz)
 - applies a low-pass filter at Fc=3kHz, 
-- reduces sampling by 2 to get better low frequency response Hilbert xform (rate = 31.25 kHz), 
-- applies 15-tap DHT on Q channel and 7 sample delay on I channel
-- subtracts I and Q samples
-- scales and outputs audio on an PWM based DAC, towards audio output
+- reduces sampling by 4 to get better low frequency response Hilbert xform (rate = 15.625 kHz), 
+- demodulates:
+-- applies 15-tap DHT on Q channel and 7 sample delay on I channel
+-- subtracts I and Q samples
+- scales, filters and outputs audio on an PWM based DAC, towards audio output
 
 On core0 the main loop takes care of user I/O, all other controls and the monitor port. There is also a LED flashing timer callback functioning as a heartbeat.
 
