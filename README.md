@@ -55,3 +55,8 @@ The folder **$PICO/docs** also contains some manuals, of which the *C-SDK descri
 For calculating filters I have used the free software from Iowa Hills (http://www.iowahills.com/8DownloadPage.html)  
 I also used the online FIR filter calculator T-Filter (http://t-filter.engineerjs.com/) 
 
+# Copyright notice
+The code and eletronic designs as well as the implementations presented in this Git can be copied and modified freely for non-commercial use.
+Utilisation for commercial purposes is allowed as well, as long as a reference to the original source is included in the product.
+
+
