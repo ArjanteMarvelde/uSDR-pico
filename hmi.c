@@ -310,7 +310,7 @@ void hmi_evaluate(void)
 {
 	char s[20];
 	
-	sprintf(s, "%s %7.1f %c%3d", hmi_o_mode[hmi_sub[HMI_S_MODE]], (double)hmi_freq/1000.0, (tx_enabled?126:127),920);
+	sprintf(s, "%s %7.1f %c%3d", hmi_o_mode[hmi_sub[HMI_S_MODE]], (double)hmi_freq/1000.0, (tx_enabled?'T':'R'),920);
 	lcd_writexy(0,0,s);
 	switch (hmi_state)
 	{

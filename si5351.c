@@ -53,8 +53,11 @@ MSi: target for mid-band, i.e. Fvco=750MHz
 MSN = MSi*Ri*Fout/Fxtal (should be between 24 and 36)
 
 Only use MSi even-integers, i.e. d=[4, 6, 8..126], e=0 and f=100000, and set INT bits in reg 22, 23. 
-Phase offset MS0 (reg 165) must be 0, MS1 (reg 166) must be equal to MS1 for 90 deg. Set INV bit in reg 17 to add 180 deg.
-NOTE: Phase offsets only work when Ri = 1, this means minimum Fout is 4.762MHz at Fvco = 600MHz
+Quadrature Phase offsets (i.e. delay): 
+- Offset for MS0 (reg 165) must be 0 (cosine), 
+- Offset for MS1 (reg 166) must be equal to divider MS1 for 90 deg (sine),
+- Set INV bit (reg 17) to add 180 deg.
+NOTE: Phase offsets only work when Ri = 1, this means minimum Fout is 4.762MHz at Fvco = 600MHz. Additional flip/flop dividers are needed to get 80m band frequencies, or Fvco must be tuned below spec.
 
 
  
@@ -265,7 +268,7 @@ void si_setmsi(uint8_t i)
 			data[1] = vfo[0].msi;
 			i2c_write_blocking(i2c1, I2C_VFO, data, 2, false);
 		}
-		else
+		else										// Phase is 0 or 180 deg
 		{
 			data[0] = SI_CLK1_PHOFF;
 			data[1] = 0;

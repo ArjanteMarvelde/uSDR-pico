@@ -46,10 +46,10 @@
  * ADC is 12 bit, so resolution is by definition 4096
  * To eliminate undefined behavior we clip off the upper 4 sample bits.
  */
-#define DAC_RANGE	250
-#define DAC_BIAS	DAC_RANGE/2
+#define DAC_RANGE	256
+#define DAC_BIAS	(DAC_RANGE/2)
 #define ADC_RANGE	4096
-#define ADC_BIAS	ADC_RANGE/2
+#define ADC_BIAS	(ADC_RANGE/2)
 
 /* 
  * Callback timeout and inter-core FIFO commands. 
@@ -62,9 +62,18 @@
 #define DSP_RX		2
 
 
+/*
+ * AGC reference level is log2(64) = 6, where 64 is the MSB of half DAC_RANGE
+ * 1/AGC_DECAY and 1/AGC_ATTACK are multipliers before agc_gain value integrator
+ * These values should ultimately be set by the HMI.
+ */
+#define AGC_REF		6
+#define AGC_DECAY	1024
+#define AGC_ATTACK	128
+
 /* 
  * Low pass filters Fc=3, 7 and 15 kHz (see http://t-filter.engineerjs.com/)
- * for sample rates 62.500 , 31.250 or 15.625 kHz , stopband is appr -40dB
+ * Settings: sample rates 62500, 31250 or 15625 Hz, stopband -40dB, passband ripple 5dB
  * Note: 8 bit precision, so divide sum by 256 
  */
 int16_t lpf3_62[15] =  {  3,  3,  5,  7,  9, 10, 11, 11, 11, 10,  9,  7,  5,  3,  3};	// Pass: 0-3000, Stop: 6000-31250
@@ -79,6 +88,12 @@ volatile uint32_t fifo_overrun, fifo_rx, fifo_tx, fifo_xx, fifo_incnt;
 volatile bool tx_enabled;
 
 
+/*
+ * Some macro's
+ * See Alpha Max plus Beta Min algorithm for MAG (vector length)
+ */
+#define ABS(x)		((x)<0?-(x):(x))
+#define MAG(i,q)	(ABS(i)>ABS(q) ? ABS(i)+((3*ABS(q))>>3) : ABS(q)+((3*ABS(i))>>3))
 
 
 /* 
@@ -88,61 +103,85 @@ volatile bool tx_enabled;
  */
 volatile uint16_t adc_result[3];
 volatile int adc_next;								// Remember which ADC the result is from
-uint32_t adc_count=0;
+uint32_t adc_count=0;								// Debugging
 void adcfifo_handler(void)
 {
-	adc_result[adc_next] = adc_fifo_get();
-	adc_next = adc_hw->cs;
-	adc_next = (adc_next >> ADC_CS_AINSEL_LSB) & 3;	// Only 0, 1 and  are valid
+	adc_result[adc_next] = adc_fifo_get();			// Get result from fifo
+	adc_next = adc_hw->cs;							// Update adc_next with HW CS register
+	adc_next = (adc_next >> ADC_CS_AINSEL_LSB) & 3;	// Shift and Mask: Only 0, 1 and 2 are valid numbers
 	adc_count++;
 }
 	
 
 /* 
  * CORE1: 
- * Execute RX branch signal processing, max time to spend is <16us !
- * No ADC sample interleaving, take both I and Q channels.
+ * Execute RX branch signal processing, max time to spend is <16us, i.e. rate is 62.5 kHz
+ * No ADC sample interleaving, read both I and Q channels.
  * The delay is only 2us per conversion, which causes less distortion than interpolation of samples.
  */
 volatile int16_t i_s_raw[15], q_s_raw[15];			// Raw I/Q samples minus DC bias
+volatile uint16_t peak=0;							// Peak detector running value
+volatile int16_t agc_gain=0, agc_accu=0;	       	// AGC gain (shift value), log peak level integrator
 volatile int16_t i_s[15], q_s[15];					// Filtered I/Q samples
 volatile int16_t i_dc, q_dc; 						// DC bias for I/Q channel
 volatile int rx_cnt=0;								// Decimation counter
 bool rx(void) 
 {
-	int16_t q_sample, i_sample;
+	int16_t q_sample, i_sample, a_sample;
 	int32_t q_accu, i_accu;
 	int16_t qh;
-	int i;
+	uint16_t i;
+	int16_t k;
 
+	/*** SAMPLING ***/
+	
 	i_sample = adc_result[0];						// Take last ADC 0 result
 	q_sample = adc_result[1];						// Take last ADC 1 result
+		
+	/*
+	 * Remove DC and store new sample
+	 * IIR filter: dc = a*sample + (1-a)*dc  where a = 1/128
+	 * Amplitude of samples should fit inside [-2048, 2047]
+	 */
+	q_sample = (q_sample&0x0fff) - ADC_BIAS;		// Clip to 12 bits and subtract mid-range
+	q_dc += (q_sample>>7) - (q_dc>>7);				//   then IIR running average
+	q_sample -= q_dc;								//   and subtract DC
+	i_sample = (i_sample&0x0fff) - ADC_BIAS;		// Same for I sample
+	i_dc += (i_sample>>7) - (i_dc>>7);
+	i_sample -= i_dc;
 
+	/*
+	 * Shift with AGC feedback from AUDIO GENERATION stage
+	 * This behavior in essence is exponential, complementing the logarithmic peak detector
+	 */
+	if (agc_gain > 0)
+	{
+		q_sample <<= agc_gain;
+		i_sample <<= agc_gain;
+	}
+	else if (agc_gain < 0)
+	{
+		q_sample >>= -agc_gain;
+		i_sample >>= -agc_gain;
+	}
+	 
 	/* 
-	 * Shift in I and Q raw samples 
+	 * Shift-in I and Q raw samples 
 	 */
 	for (i=0; i<14; i++)
 	{
 		q_s_raw[i] = q_s_raw[i+1];					// Q raw samples shift register
 		i_s_raw[i] = i_s_raw[i+1];					// I raw samples shift register
 	}
-		
-	/*
-	 * Remove DC and store new sample
-	 * IIR filter: dc = a*sample + (1-a)*dc  where a = 1/128
-	 */
-	q_sample = (q_sample&0x0fff) - ADC_BIAS;		// Clip and subtract mid-range
-	q_dc += (q_sample>>7) - (q_dc>>7);				//   then IIR running average
-	q_s_raw[14] = q_sample - q_dc;					//   and subtract DC, store in shift register
-	i_sample = (i_sample&0x0fff) - ADC_BIAS;
-	i_dc += (i_sample>>7) - (i_dc>>7);
-	i_s_raw[14] = i_sample - i_dc;
-		
+	q_s_raw[14] = q_sample;							// Store in shift registers
+	i_s_raw[14] = i_sample;
+	
+	
 	/*
 	 * Low pass filter + decimation
 	 */
 	rx_cnt = (rx_cnt+1)&3;							// Calculate only every fourth sample
-	if (rx_cnt>0) return true;
+	if (rx_cnt>0) return (true);					// So net sample time is 64us or 15.625 kHz
 	
 	for (i=0; i<14; i++) 							// Shift decimated samples
 	{
@@ -153,50 +192,68 @@ bool rx(void)
 	i_accu = 0;
 	for (i=0; i<15; i++)							// Low pass FIR filter
 	{
-		q_accu += (int32_t)q_s_raw[i]*lpf3_62[i];	// Fc=3kHz, at 62.5 kHz sampling		
-		i_accu += (int32_t)i_s_raw[i]*lpf3_62[i];	// Fc=3kHz, at 62.5 kHz sampling	
+		q_accu += (int32_t)q_s_raw[i]*lpf3_62[i];	// Fc=3kHz, at 62.5 kHz raw sampling		
+		i_accu += (int32_t)i_s_raw[i]*lpf3_62[i];	// Fc=3kHz, at 62.5 kHz raw sampling	
 	}
-	q_s[14] = q_accu >> 8;
-	i_s[14] = q_accu >> 8;
+	q_accu >>= 8;
+	i_accu >>= 8;
+	
+	q_s[14] = q_accu;
+	i_s[14] = i_accu;
+	
 
-	/*
-	 * From here things get dependent on receive mode.
-	 * We assume USB for now, e.g. supporting FT8
-	 */
+	/*** DEMODULATION ***/
 
 	/* 
-	 * Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills)
+	 * USB demodulate: I[7] - Qh, 
+	 * Qh is Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills calculator)
 	 */	
 	q_accu = (q_s[0]-q_s[14])*315L + (q_s[2]-q_s[12])*440L + (q_s[4]-q_s[10])*734L + (q_s[6]-q_s[ 8])*2202L;
-	qh = q_accu >> 12;	 
+	qh = q_accu >> 12;	
+	a_sample = i_s[7] - qh;
 	
-	/* 
-	 * SSB demodulate: I[7] - Qh
-	 * Add DAC_BIAS offset, Clip to DAC_RANGE and send to audio DAC output
+	/*
+	 * AM demodulate: sqrt(sqr(i)+sqr(q))
+	 * Approximated with MAG(i,q)
 	 */
-	q_sample = ((i_s[7] - qh)/2)+DAC_BIAS;
-	q_sample = (q_sample>DAC_RANGE)?DAC_RANGE:((q_sample<0)?0:q_sample);
-	pwm_set_chan_level(dac_audio, PWM_CHAN_A, q_sample);
+	// a_sample = MAG(i_s[14], q_s[14]);
+	
+	
+	/*** AUDIO GENERATION ***/
+	/*
+	 * AGC, peak detector
+	 * Sample speed is still 15625 per second
+	 */
+	peak = (127*peak + (ABS(a_sample)))>>7;			// Running average level detect, a=1/128
+	k=0; i=peak;									// Logarithmic peak detection
+	if (i&0xff00) {k+=8; i>>=8;}					// k=log2(peak), find highest bit set
+	if (i&0x00f0) {k+=4; i>>=4;}
+	if (i&0x000c) {k+=2; i>>=2;}
+	if (i&0x0002) {k+=1;}
+	agc_accu += (k - AGC_REF);						// Add difference with target to integrator (Acc += Xn - R)
+	if (agc_accu > AGC_ATTACK)						// Attack time, gain correction in case of high level
+	{
+		agc_gain--;									// Decrease gain
+		agc_accu -= AGC_ATTACK;						// Reset integrator
+	} else if (agc_accu < -(AGC_DECAY))				// Decay time, gain correction in case of low level
+	{
+		agc_gain++;									// Increase gain
+		agc_accu += AGC_DECAY;						// Reset integrator
+	}
+	 
+
+	/*
+	 * Scale and clip output,  
+	 * Send to audio DAC output
+	 */
+	a_sample += DAC_BIAS;							// Add bias level
+	if (a_sample > DAC_RANGE)						// Clip to DAC range
+		a_sample = DAC_RANGE;
+	else if (a_sample<0)
+		a_sample = 0;
+	pwm_set_chan_level(dac_audio, PWM_CHAN_A, a_sample);
 
 
-/* AGC ALGORITHM
-if(m_Peak>m_AttackAve) 								//if power is rising (use m_AttackRiseAlpha time constant)
-	m_AttackAve = (1.0-m_AttackRiseAlpha)*m_AttackAve + m_AttackRiseAlpha*m_Peak;
-else 												//else magnitude is falling (use m_AttackFallAlpha time constant)
-	m_AttackAve = (1.0-m_AttackFallAlpha)*m_AttackAve + m_AttackFallAlpha*m_Peak;
-if(m_Peak>m_DecayAve) 								//if magnitude is rising (use m_DecayRiseAlpha time constant)
-{
-	m_DecayAve = (1.0-m_DecayRiseAlpha)*m_DecayAve + m_DecayRiseAlpha*m_Peak;
-	m_HangTimer = 0; 								//reset hang timer
-}
-else
-{ 													//here if decreasing signal
-if(m_HangTimer<m_HangTime)
-	m_HangTimer++; 									//just inc and hold current m_DecayAve
-else 												//else decay with m_DecayFallAlpha which is RELEASE_TIMECONST
-	m_DecayAve = (1.0-m_DecayFallAlpha)*m_DecayAve + m_DecayFallAlpha*m_Peak;
-}
-*/
 	return true;
 }
 
@@ -290,13 +347,13 @@ void dsp_loop()
 	gpio_set_function(21, GPIO_FUNC_PWM);			// GP21 is PWM for Q DAC (Slice 2, Channel B)
 	dac_iq = pwm_gpio_to_slice_num(20);				// Get PWM slice for GP20 (Same for GP21)
 	pwm_set_clkdiv_int_frac (dac_iq, 1, 0);			// clock divide by 1
-	pwm_set_wrap(dac_iq, DAC_RANGE);				// Set cycle length
+	pwm_set_wrap(dac_iq, DAC_RANGE-1);				// Set cycle length
 	pwm_set_enabled(dac_iq, true); 					// Set the PWM running
 	
 	gpio_set_function(22, GPIO_FUNC_PWM);			// GP22 is PWM for Audio DAC (Slice 3, Channel A)
 	dac_audio = pwm_gpio_to_slice_num(22);			// Find PWM slice for GP22
 	pwm_set_clkdiv_int_frac (dac_audio, 1, 0);		// clock divide by 1
-	pwm_set_wrap(dac_audio, DAC_RANGE);				// Set cycle length
+	pwm_set_wrap(dac_audio, DAC_RANGE-1);			// Set cycle length
 	pwm_set_enabled(dac_audio, true); 				// Set the PWM running
 
 	/* Initialize ADCs */
@@ -309,7 +366,7 @@ void dsp_loop()
 	adc_next = 0;
 	
 	adc_set_round_robin(1+2+4);						// Sequence ADC 0-1-2 free running
-	adc_fifo_setup(true,false,1,false,false);		// IRQ for every result (threshold = 1)
+	adc_fifo_setup(true,false,1,false,false);		// IRQ for every result (fifo threshold = 1)
     irq_set_exclusive_handler(ADC0_IRQ_FIFO, adcfifo_handler);
 	adc_irq_set_enabled(true);
 	irq_set_enabled(ADC0_IRQ_FIFO, true);
@@ -359,7 +416,18 @@ bool dsp_callback(struct repeating_timer *t)
 
 /* 
  * CORE0: 
- * Initialize dsp context and spawn core1 process 
+ * Initialize dsp context and spawn CORE1 process 
+ *
+ * Some CORE1 code parts should not run from Flash, but be loaded in SRAM at boot
+ * See platform.h for function qualifier macro's
+ * for example: 
+ * void __not_in_flash_func(funcname)(int arg1, float arg2)
+ * {
+ * }
+ *
+ * Need to set BUS_PRIORITY of Core 1 to high
+ * #include bus_ctrl.h
+ * bus_ctrl_hw->priority = BUSCTRL_BUS_PRIORITY_PROC1_BITS; // Set Core 1 prio high
  */
 void dsp_init() 
 {
