@@ -13,7 +13,14 @@
 #include "hardware/adc.h"
 #include "hardware/pwm.h"
 
+
+void dsp_setagc(int agc);
+void dsp_setmode(int mode);
+
 extern volatile bool tx_enabled;
+#define DSP_SETPTT(on)			tx_enabled = (on)
+
+
 void dsp_init();
 
 

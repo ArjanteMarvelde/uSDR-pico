@@ -38,6 +38,7 @@
 
 #include "dsp.h"
 
+
 /* 
  * DAC_RANGE defines PWM cycle, determining DAC resolution and PWM frequency.
  * DAC resolution = Vcc / DAC_RANGE
@@ -66,10 +67,48 @@
  * AGC reference level is log2(64) = 6, where 64 is the MSB of half DAC_RANGE
  * 1/AGC_DECAY and 1/AGC_ATTACK are multipliers before agc_gain value integrator
  * These values should ultimately be set by the HMI.
+ * The time it takes to effect in a gain change is the ( (Set time)/(signal delta) ) / samplerate
+ * So when delta is 1, and attack is 64, the time is 64/15625 = 4msec (fast attack)
+ * The decay time is about 100x this value
+ * Slow attack would be about 4096
  */
 #define AGC_REF		6
-#define AGC_DECAY	1024
-#define AGC_ATTACK	128
+#define AGC_DECAY	8192
+#define AGC_FAST	64
+#define AGC_SLOW	4096
+#define AGC_OFF		65534
+volatile uint16_t agc_decay  = AGC_OFF;
+volatile uint16_t agc_attack = AGC_OFF;
+void dsp_setagc(int agc)
+{
+	switch(agc)
+	{
+	case 1:		//SLOW, for values see hmi.c
+		agc_attack = AGC_SLOW;
+		agc_decay  = AGC_DECAY;
+		break;
+	case 2:		//FAST
+		agc_attack = AGC_FAST;
+		agc_decay  = AGC_DECAY;
+		break;
+	default: 	//OFF
+		agc_attack = AGC_OFF;
+		agc_decay  = AGC_OFF;
+		break;
+	}
+}
+
+/*
+ * MODE is modulation/demodulation 
+ * This setting steers the signal processing branch chosen
+ */
+volatile uint16_t dsp_mode;				// For values see hmi.c
+void dsp_setmode(int mode)
+{
+	dsp_mode = (uint16_t)mode;
+}
+
+
 
 /* 
  * Low pass filters Fc=3, 7 and 15 kHz (see http://t-filter.engineerjs.com/)
@@ -86,6 +125,7 @@ int16_t lpf15_62[15] = { -1,  3, 12,  6,-12, -4, 40, 69, 40, -4,-12,  6, 12,  3,
 volatile uint16_t dac_iq, dac_audio;
 volatile uint32_t fifo_overrun, fifo_rx, fifo_tx, fifo_xx, fifo_incnt;
 volatile bool tx_enabled;
+
 
 
 /*
@@ -203,21 +243,36 @@ bool rx(void)
 	
 
 	/*** DEMODULATION ***/
-
-	/* 
-	 * USB demodulate: I[7] - Qh, 
-	 * Qh is Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills calculator)
-	 */	
-	q_accu = (q_s[0]-q_s[14])*315L + (q_s[2]-q_s[12])*440L + (q_s[4]-q_s[10])*734L + (q_s[6]-q_s[ 8])*2202L;
-	qh = q_accu >> 12;	
-	a_sample = i_s[7] - qh;
-	
-	/*
-	 * AM demodulate: sqrt(sqr(i)+sqr(q))
-	 * Approximated with MAG(i,q)
-	 */
-	// a_sample = MAG(i_s[14], q_s[14]);
-	
+	switch(dsp_mode)
+	{
+	case 0:											//USB
+		/* 
+		 * USB demodulate: I[7] - Qh, 
+		 * Qh is Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills calculator)
+		 */	
+		q_accu = (q_s[0]-q_s[14])*315L + (q_s[2]-q_s[12])*440L + (q_s[4]-q_s[10])*734L + (q_s[6]-q_s[ 8])*2202L;
+		qh = q_accu >> 12;	
+		a_sample = i_s[7] - qh;
+		break;
+	case 1:											//LSB
+		/* 
+		 * USB demodulate: I[7] - Qh, 
+		 * Qh is Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills calculator)
+		 */	
+		q_accu = (q_s[0]-q_s[14])*315L + (q_s[2]-q_s[12])*440L + (q_s[4]-q_s[10])*734L + (q_s[6]-q_s[ 8])*2202L;
+		qh = q_accu >> 12;	
+		a_sample = i_s[7] + qh;
+		break;
+	case 2:											//AM
+		/*
+		 * AM demodulate: sqrt(sqr(i)+sqr(q))
+		 * Approximated with MAG(i,q)
+		 */
+		a_sample = MAG(i_s[14], q_s[14]);
+		break;
+	default:
+		break;
+	}
 	
 	/*** AUDIO GENERATION ***/
 	/*
@@ -231,14 +286,14 @@ bool rx(void)
 	if (i&0x000c) {k+=2; i>>=2;}
 	if (i&0x0002) {k+=1;}
 	agc_accu += (k - AGC_REF);						// Add difference with target to integrator (Acc += Xn - R)
-	if (agc_accu > AGC_ATTACK)						// Attack time, gain correction in case of high level
+	if (agc_accu > agc_attack)						// Attack time, gain correction in case of high level
 	{
 		agc_gain--;									// Decrease gain
-		agc_accu -= AGC_ATTACK;						// Reset integrator
-	} else if (agc_accu < -(AGC_DECAY))				// Decay time, gain correction in case of low level
+		agc_accu -= agc_attack;						// Reset integrator
+	} else if (agc_accu < -(agc_decay))				// Decay time, gain correction in case of low level
 	{
 		agc_gain++;									// Increase gain
-		agc_accu += AGC_DECAY;						// Reset integrator
+		agc_accu += agc_decay;						// Reset integrator
 	}
 	 
 
