@@ -35,10 +35,10 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 - [x] implement the user I/O bit: LCD+Rotary encoder+buttons
 - [x] implement AGC 
 - [ ] implement RSSI
-- [ ] implement LSB
-- [ ] implement AM
+- [x] implement LSB
+- [x] implement AM
 - [x] sort out the surrounding HW
-- [x] maybe design a PCB?
+- [x] design a set of PCBs
 
 ## Installing and using the SDK for Windows: 
 Please refer to https://github.com/ndabas/pico-setup-windows/releases where the latest installer can be downloaded (e.g. **pico-setup-windows-0.3-x64.exe**).  
