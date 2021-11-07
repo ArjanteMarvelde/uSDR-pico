@@ -60,7 +60,7 @@ For calculating filters I have used the free software from Iowa Hills (http://ww
 I also used the online FIR filter calculator T-Filter (http://t-filter.engineerjs.com/) 
 
 # Copyright notice
-The code and eletronic designs as well as the implementations presented in this Git can be copied and modified freely for non-commercial use.
-Utilisation for commercial purposes is allowed as well, as long as a reference to the original source is included in the product.
+The code and electronic designs as well as the implementations presented in this reposiory can be copied and modified freely, for non-commercial use.
+Use for commercial purposes is allowed as well, as long as a reference to this repository is included in the product.
 
 
