@@ -37,8 +37,10 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 - [ ] implement RSSI
 - [x] implement LSB
 - [x] implement AM
+- [x] SW based VOX
 - [x] sort out the surrounding HW
 - [x] design a set of PCBs
+- [ ] improve speed: better dual-core management for memory and timer 
 
 ## Installing and using the SDK for Windows: 
 Please refer to https://github.com/ndabas/pico-setup-windows/releases where the latest installer can be downloaded (e.g. **pico-setup-windows-0.3-x64.exe**).  
