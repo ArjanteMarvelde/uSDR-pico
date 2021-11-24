@@ -37,6 +37,7 @@
 #define ADC0_IRQ_FIFO 22
 
 #include "dsp.h"
+#include "hmi.h"
 
 
 /* 
@@ -64,10 +65,10 @@
 
 
 /*
- * AGC reference level is log2(64) = 6, where 64 is the MSB of half DAC_RANGE
+ * AGC reference level is log2(0x40) = 6, where 0x40 is the MSB of half DAC_RANGE
  * 1/AGC_DECAY and 1/AGC_ATTACK are multipliers before agc_gain value integrator
  * These values should ultimately be set by the HMI.
- * The time it takes to effect in a gain change is the ( (Set time)/(signal delta) ) / samplerate
+ * The time it takes to a gain change is the ( (Set time)/(signal delta) ) / samplerate
  * So when delta is 1, and attack is 64, the time is 64/15625 = 4msec (fast attack)
  * The decay time is about 100x this value
  * Slow attack would be about 4096
@@ -76,7 +77,7 @@
 #define AGC_DECAY	8192
 #define AGC_FAST	64
 #define AGC_SLOW	4096
-#define AGC_OFF		65534
+#define AGC_OFF		32766
 volatile uint16_t agc_decay  = AGC_OFF;
 volatile uint16_t agc_attack = AGC_OFF;
 void dsp_setagc(int agc)
@@ -102,12 +103,45 @@ void dsp_setagc(int agc)
  * MODE is modulation/demodulation 
  * This setting steers the signal processing branch chosen
  */
-volatile uint16_t dsp_mode;				// For values see hmi.c
+volatile uint16_t dsp_mode;				// For values see hmi.c, assume {USB,LSB,AM,CW}
 void dsp_setmode(int mode)
 {
 	dsp_mode = (uint16_t)mode;
 }
 
+
+
+
+/*
+ * VOX LINGER is the number of 16us cycles to wait before releasing TX mode
+ * The level of detection is related to the maximum ADC range.
+ */
+#define VOX_LINGER		500000/16
+#define VOX_HIGH		ADC_BIAS/2
+#define VOX_MEDIUM		ADC_BIAS/4
+#define VOX_LOW			ADC_BIAS/16
+#define VOX_OFF			0
+volatile uint16_t vox_count;
+volatile uint16_t vox_level = VOX_OFF;
+void dsp_setvox(int vox)
+{
+	switch(vox)
+	{
+	case 1:
+		vox_level = VOX_LOW;
+		break;
+	case 2:
+		vox_level = VOX_MEDIUM;
+		break;
+	case 3:
+		vox_level = VOX_HIGH;
+		break;
+	default: 
+		vox_level = VOX_OFF;
+		vox_count = 0;
+		break;
+	}
+}
 
 
 /* 
@@ -161,10 +195,12 @@ void adcfifo_handler(void)
  */
 volatile int16_t i_s_raw[15], q_s_raw[15];			// Raw I/Q samples minus DC bias
 volatile uint16_t peak=0;							// Peak detector running value
-volatile int16_t agc_gain=0, agc_accu=0;	       	// AGC gain (shift value), log peak level integrator
+volatile int16_t agc_gain=0;	       				// AGC gain (left-shift value)
+volatile int16_t agc_accu=0;	       				// Log peak level integrator
 volatile int16_t i_s[15], q_s[15];					// Filtered I/Q samples
 volatile int16_t i_dc, q_dc; 						// DC bias for I/Q channel
 volatile int rx_cnt=0;								// Decimation counter
+
 bool rx(void) 
 {
 	int16_t q_sample, i_sample, a_sample;
@@ -175,8 +211,8 @@ bool rx(void)
 
 	/*** SAMPLING ***/
 	
-	i_sample = adc_result[0];						// Take last ADC 0 result
-	q_sample = adc_result[1];						// Take last ADC 1 result
+	q_sample = adc_result[0];						// Take last ADC 0 result, connected to Q input
+	i_sample = adc_result[1];						// Take last ADC 1 result, connected to I input
 		
 	/*
 	 * Remove DC and store new sample
@@ -184,25 +220,26 @@ bool rx(void)
 	 * Amplitude of samples should fit inside [-2048, 2047]
 	 */
 	q_sample = (q_sample&0x0fff) - ADC_BIAS;		// Clip to 12 bits and subtract mid-range
-	q_dc += (q_sample>>7) - (q_dc>>7);				//   then IIR running average
+	q_dc += q_sample/128 - q_dc/128;				//   then IIR running average
 	q_sample -= q_dc;								//   and subtract DC
 	i_sample = (i_sample&0x0fff) - ADC_BIAS;		// Same for I sample
-	i_dc += (i_sample>>7) - (i_dc>>7);
+	i_dc += i_sample/128 - i_dc/128;
 	i_sample -= i_dc;
 
 	/*
 	 * Shift with AGC feedback from AUDIO GENERATION stage
+	 * Note: bitshift does not work with negative numbers, so need to MPY/DIV
 	 * This behavior in essence is exponential, complementing the logarithmic peak detector
 	 */
 	if (agc_gain > 0)
 	{
-		q_sample <<= agc_gain;
-		i_sample <<= agc_gain;
+		q_sample = q_sample * (1<<agc_gain);
+		i_sample = i_sample * (1<<agc_gain);
 	}
 	else if (agc_gain < 0)
 	{
-		q_sample >>= -agc_gain;
-		i_sample >>= -agc_gain;
+		q_sample = q_sample / (1<<(-agc_gain));
+		i_sample = i_sample / (1<<(-agc_gain));
 	}
 	 
 	/* 
@@ -235,8 +272,8 @@ bool rx(void)
 		q_accu += (int32_t)q_s_raw[i]*lpf3_62[i];	// Fc=3kHz, at 62.5 kHz raw sampling		
 		i_accu += (int32_t)i_s_raw[i]*lpf3_62[i];	// Fc=3kHz, at 62.5 kHz raw sampling	
 	}
-	q_accu >>= 8;
-	i_accu >>= 8;
+	q_accu = q_accu/256;
+	i_accu = i_accu/256;
 	
 	q_s[14] = q_accu;
 	i_s[14] = i_accu;
@@ -247,20 +284,20 @@ bool rx(void)
 	{
 	case 0:											//USB
 		/* 
-		 * USB demodulate: I[7] - Qh, 
+		 * USB demodulate: I[7] - Qh,
 		 * Qh is Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills calculator)
 		 */	
 		q_accu = (q_s[0]-q_s[14])*315L + (q_s[2]-q_s[12])*440L + (q_s[4]-q_s[10])*734L + (q_s[6]-q_s[ 8])*2202L;
-		qh = q_accu >> 12;	
+		qh = q_accu / 4096L;	
 		a_sample = i_s[7] - qh;
 		break;
 	case 1:											//LSB
 		/* 
-		 * USB demodulate: I[7] - Qh, 
+		 * LSB demodulate: I[7] + Qh,
 		 * Qh is Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills calculator)
 		 */	
 		q_accu = (q_s[0]-q_s[14])*315L + (q_s[2]-q_s[12])*440L + (q_s[4]-q_s[10])*734L + (q_s[6]-q_s[ 8])*2202L;
-		qh = q_accu >> 12;	
+		qh = q_accu / 4096L;	
 		a_sample = i_s[7] + qh;
 		break;
 	case 2:											//AM
@@ -277,9 +314,9 @@ bool rx(void)
 	/*** AUDIO GENERATION ***/
 	/*
 	 * AGC, peak detector
-	 * Sample speed is still 15625 per second
+	 * Sample speed is 15625 per second
 	 */
-	peak = (127*peak + (ABS(a_sample)))>>7;			// Running average level detect, a=1/128
+	peak += (ABS(a_sample))/128 - peak/128;			// Running average level detect, a=1/128
 	k=0; i=peak;									// Logarithmic peak detection
 	if (i&0xff00) {k+=8; i>>=8;}					// k=log2(peak), find highest bit set
 	if (i&0x00f0) {k+=4; i>>=4;}
@@ -295,7 +332,6 @@ bool rx(void)
 		agc_gain++;									// Increase gain
 		agc_accu += agc_decay;						// Reset integrator
 	}
-	 
 
 	/*
 	 * Scale and clip output,  
@@ -315,49 +351,83 @@ bool rx(void)
 
 /* 
  * CORE1: 
- * Execute TX branch signal processing
+ * The VOX function is called separately every cycle, to check audio level.
+ * Execute TX branch signal processing when tx enabled
  */
 volatile int16_t a_s_raw[15]; 						// Raw samples, minus DC bias
+volatile int16_t a_level=0;							// Average level of raw sample stream
 volatile int16_t a_s[15];							// Filtered and decimated samples
 volatile int16_t a_dc;								// DC level
 volatile int tx_cnt=0;								// Decimation counter
+
+bool vox(void)
+{
+	int16_t a_sample;
+	int i;
+
+	/*
+	 * Get sample and shift into delay line
+	 */
+	a_sample = adc_result[2];						// Get latest ADC 2 result
+	
+
+	/*
+	 * Remove DC and store new raw sample
+	 * IIR filter: dc = a*sample + (1-a)*dc  where a = 1/128
+	 */
+	a_sample = (a_sample&0x0fff) - ADC_BIAS;		// Clip and subtract mid-range
+	a_dc += (a_sample - a_dc)/128;					//   then IIR running average
+	a_sample -= a_dc;								//   subtract DC
+	for (i=0; i<14; i++) 							//   and store in shift register
+		a_s_raw[i] = a_s_raw[i+1];
+	a_s_raw[14] = a_sample;
+	
+	/*
+	 * Detect level of audio signal
+	 * Return true if VOX enabled and:
+	 * - Audio level higher than threshold 
+	 * - Linger time sill active 
+	 */
+	if (a_sample<0) a_sample = -a_sample;			// Absolute value
+	a_level += (a_sample - a_level)/128;			//   running average, 16usec * 128 = 2msec
+
+	if (vox_level != VOX_OFF)
+	{
+		if (a_level > vox_level)
+		{
+			vox_count = VOX_LINGER;
+			return(true);
+		}
+		if (vox_count>0)
+		{
+			vox_count--;
+			return(true);
+		}
+	}
+	return(false);
+}
+
 bool tx(void) 
 {
-	static int tx_phase = 0;
-	int16_t a_sample;
 	int32_t a_accu;
 	int16_t qh;
 	int i;
 		
-	/*
-	 * Get sample and shift into delay line
-	 */
-	a_sample = adc_result[2];						// Take last ADC 2 result
-	
-	for (i=0; i<14; i++) 
-		a_s_raw[i] = a_s_raw[i+1];					// Audio raw samples shift register
-
-	/*
-	 * Remove DC and store new sample
-	 * IIR filter: dc = a*sample + (1-a)*dc  where a = 1/128
-	 */
-	a_sample = (a_sample&0x0fff) - ADC_BIAS;		// Clip and subtract mid-range
-	a_dc = (a_sample>>7) + a_dc - (a_dc>>7);		//   then IIR running average
-	a_s_raw[14] = a_sample - a_dc;					//   and subtract DC, store in shift register
+	/*** RAW Audio SAMPLES from VOX function ***/
 
 	/*
 	 * Low pass filter + decimation
 	 */
 	tx_cnt = (tx_cnt+1)&3;							// Calculate only every fourth sample
-	if (tx_cnt>0) return true;
+	if (tx_cnt>0) return true;						//   So effective sample rate will be 15625Hz
 	
 	for (i=0; i<14; i++) 							// Shift decimated samples
 		a_s[i] = a_s[i+1];
 
 	a_accu = 0;										// Initialize accumulator
-	for (i=0; i<15; i++)							// Low pass FIR filter
-		a_accu += (int32_t)a_s_raw[i]*lpf3_62[i];	// Fc=3kHz, at 62.5 kHz sampling		
-	a_s[14] = a_accu >> 8;
+	for (i=0; i<15; i++)							// Low pass FIR filter, using raw samples
+		a_accu += (int32_t)a_s_raw[i]*lpf3_62[i];	//   Fc=3kHz, at 62.5 kHz sampling		
+	a_s[14] = a_accu / 256;
 
 	/*
 	 * From here things get dependent on transmit mode.
@@ -368,14 +438,14 @@ bool tx(void)
 	 * Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills):
 	 */	
 	a_accu = (a_s[0]-a_s[14])*315L + (a_s[2]-a_s[12])*440L + (a_s[4]-a_s[10])*734L + (a_s[6]-a_s[ 8])*2202L;
-	qh = (int16_t)(a_accu >> 12);	 
+	qh = (int16_t)(a_accu / 4096);	 
 
 	/* 
 	 * Write I and Q to QSE DACs, phase is 7 back.
 	 * Need to multiply AC with DAC_RANGE/ADC_RANGE (appr 1/16, but compensate for losses)
 	 */
-	pwm_set_chan_level(dac_iq, PWM_CHAN_A, DAC_BIAS + (a_s[7]/4));
-	pwm_set_chan_level(dac_iq, PWM_CHAN_B, DAC_BIAS + (qh/4));
+	pwm_set_chan_level(dac_iq, PWM_CHAN_A, DAC_BIAS + (qh/4));
+	pwm_set_chan_level(dac_iq, PWM_CHAN_B, DAC_BIAS + (a_s[7]/4));
 
 	return true;
 }
@@ -398,8 +468,8 @@ void dsp_loop()
 	fifo_incnt++;
 
 	/* Initialize DACs */
-	gpio_set_function(20, GPIO_FUNC_PWM);			// GP20 is PWM for I DAC (Slice 2, Channel A)
-	gpio_set_function(21, GPIO_FUNC_PWM);			// GP21 is PWM for Q DAC (Slice 2, Channel B)
+	gpio_set_function(20, GPIO_FUNC_PWM);			// GP20 is PWM for Q DAC (Slice 2, Channel A)
+	gpio_set_function(21, GPIO_FUNC_PWM);			// GP21 is PWM for I DAC (Slice 2, Channel B)
 	dac_iq = pwm_gpio_to_slice_num(20);				// Get PWM slice for GP20 (Same for GP21)
 	pwm_set_clkdiv_int_frac (dac_iq, 1, 0);			// clock divide by 1
 	pwm_set_wrap(dac_iq, DAC_RANGE-1);				// Set cycle length
@@ -414,8 +484,8 @@ void dsp_loop()
 	/* Initialize ADCs */
 	adc_init();										// Initialize ADC to known state
 	adc_set_clkdiv(0);								// Fastest clock (500 kSps)
-	adc_gpio_init(26);								// GP26 is ADC 0 for I channel
-	adc_gpio_init(27);								// GP27 is ADC 1 for Q channel
+	adc_gpio_init(26);								// GP26 is ADC 0 for Q channel
+	adc_gpio_init(27);								// GP27 is ADC 1 for I channel
 	adc_gpio_init(28);								// GP28 is ADC 2 for Audio channel
 	adc_select_input(0);							// Start with ADC0
 	adc_next = 0;
@@ -434,18 +504,11 @@ void dsp_loop()
     while(1) 
 	{
         cmd = multicore_fifo_pop_blocking();		// Wait for fifo output
-		if (cmd == DSP_RX) 
-		{
-			fifo_rx++;
-			rx();
-		}
-		else if (cmd == DSP_TX)
-		{
-			fifo_tx++;
+		tx_enabled = ptt_active || vox();			// Sample audio and check level
+		if (tx_enabled)
 			tx();
-		}
 		else
-			fifo_xx++;
+			rx();
  		if (multicore_fifo_rvalid()) 
 			fifo_overrun++;							// Check for missed events
    }

@@ -83,80 +83,85 @@
 #define LCD_DATA			0x40
 
 /* I2C address and pins */
-#define I2C_LCD 		0x3E
-#define I2C0_SDA 		16
-#define I2C0_SCL 		17
+#define I2C_LCD 			0x3E
 
-
-uint8_t cgram[65] = 								// Write CGRAM
-{ 													// 8x8 bytes
-0x80,
-0x08, 0x10, 0x08, 0x10, 0x08, 0x10, 0x08, 0x00,
-0x08, 0x10, 0x08, 0x10, 0x08, 0x10, 0x0b, 0x00, 
-0x08, 0x10, 0x08, 0x10, 0x08, 0x13, 0x0b, 0x00,
-0x08, 0x10, 0x08, 0x10, 0x0b, 0x13, 0x0b, 0x00,
-0x08, 0x10, 0x08, 0x13, 0x0b, 0x13, 0x0b, 0x00,
-0x08, 0x10, 0x0b, 0x13, 0x0b, 0x13, 0x0b, 0x00,
-0x08, 0x13, 0x0b, 0x13, 0x0b, 0x13, 0x0b, 0x00,
-0x0b, 0x13, 0x0b, 0x13, 0x0b, 0x13, 0x0b, 0x00
+/*
+ * User defined characters
+ */
+uint8_t cgram[8][8] = 									// Write CGRAM
+{ 
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},	// 0x00: blank
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x1f, 0x00, 0x00},	// 0x01: Level 1
+	{0x00, 0x00, 0x00, 0x00, 0x1f, 0x1f, 0x00, 0x00},	// 0x02: Level 2
+	{0x00, 0x00, 0x00, 0x1f, 0x1f, 0x1f, 0x00, 0x00},	// 0x03: Level 3
+	{0x00, 0x00, 0x1f, 0x1f, 0x1f, 0x1f, 0x00, 0x00},	// 0x04: Level 4
+	{0x00, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x00, 0x00},	// 0x05: Level 5
+	{0x00, 0x04, 0x04, 0x04, 0x1f, 0x0e, 0x04, 0x00},	// 0x06: Receive arrow down
+	{0x04, 0x0e, 0x1f, 0x04, 0x04, 0x04, 0x00, 0x00}	// 0x07: Transmit arrow up
 };
 
 
 void lcd_init(void)
 { 
-	uint8_t txdata[8];
-	
-	/* I2C0 initialisation at 400Khz. */
-	i2c_init(i2c0, 400*1000);
-	gpio_set_function(I2C0_SDA, GPIO_FUNC_I2C);
-	gpio_set_function(I2C0_SCL, GPIO_FUNC_I2C);
-	gpio_pull_up(I2C0_SDA);
-	gpio_pull_up(I2C0_SCL);
+	uint8_t txdata[10];
+	uint8_t i;
 	
 	sleep_ms(50);
 	txdata[0] = LCD_COMMAND; 
 	
 	/* Initialize function set (see datasheet fig 23)*/
+	txdata[0] = LCD_COMMAND; 
 	txdata[1] = LCD_FUNCTIONSET | LCD_8BITMODE | LCD_2LINE | LCD_5x8DOTS;
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(4500);
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(100);
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(LCD_DELAY);
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(LCD_DELAY);
 
 	/* Initialize display control */
+	txdata[0] = LCD_COMMAND; 
 	txdata[1] = LCD_DISPLAYCONTROL | LCD_DISPLAYOFF | LCD_CURSOROFF | LCD_BLINKOFF;
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(LCD_DELAY);
 	
 	/* Display clear */
+	txdata[0] = LCD_COMMAND; 
 	txdata[1] = LCD_CLEARDISPLAY;
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(1530);
 
 	/* Initialize entry mode set */ 
+	txdata[0] = LCD_COMMAND; 
 	txdata[1] = LCD_ENTRYMODESET | LCD_ENTRYINC | LCD_ENTRYNOSHIFT;
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(LCD_DELAY);
 	
 	/* Load CGRAM */
-	txdata[1] = 0x40; 								//Set CGRAM address 0
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
-	sleep_us(LCD_DELAY);
-	i2c_write_blocking(i2c0, I2C_LCD, cgram, 65, false);
-	sleep_us(LCD_DELAY);
+	for (i=0; i<8; i++)
+	{
+		txdata[0] = LCD_COMMAND; 
+		txdata[1] = LCD_SETCGRAMADDR | (i<<3); 								//Set CGRAM address
+		i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
+		sleep_us(LCD_DELAY);
+		txdata[0] = LCD_DATA;
+		for (int j=0; j<8; j++) txdata[1+j] = cgram[i][j];
+		i2c_write_blocking(i2c1, I2C_LCD, txdata, 9, false);
+		sleep_us(LCD_DELAY);
+	}
 	
 	/* Initialize display control */
+	txdata[0] = LCD_COMMAND; 
 	txdata[1] = LCD_DISPLAYCONTROL | LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF;
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(LCD_DELAY);
 	
 	/* Display clear once more */
+	txdata[0] = LCD_COMMAND; 
 	txdata[1] = LCD_CLEARDISPLAY;
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(1530);
 }
 
@@ -166,7 +171,7 @@ void lcd_clear(void)
 
 	txdata[0] = LCD_COMMAND; 
 	txdata[1] = LCD_CLEARDISPLAY;
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(1530);
 }
 
@@ -178,12 +183,12 @@ void lcd_curxy(uint8_t x, uint8_t y, bool on)
 	y &= 0x01;
 	txdata[0] = LCD_COMMAND; 
 	txdata[1] = x | 0x80 | (y==1?0x40:0x00);
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(LCD_DELAY);
 	
 	txdata[0] = LCD_COMMAND; 
 	txdata[1] = LCD_DISPLAYCONTROL | LCD_DISPLAYON | (on?LCD_CURSORON:LCD_CURSOROFF) | LCD_BLINKOFF;
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(LCD_DELAY);
 }
 
@@ -195,12 +200,12 @@ void lcd_putxy(uint8_t x, uint8_t y, uint8_t c)
 	y &= 0x01;
 	txdata[0] = LCD_COMMAND; 
 	txdata[1] = x | 0x80 | (y==1?0x40:0x00);
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(LCD_DELAY);
 
 	txdata[0] = LCD_DATA; 
 	txdata[1] = c;
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(LCD_DELAY);
 }
 
@@ -213,14 +218,14 @@ void lcd_writexy(uint8_t x, uint8_t y, uint8_t *s)
 	y &= 0x01;
 	txdata[0] = LCD_COMMAND; 
 	txdata[1] = x | 0x80 | ((y==1)?0x40:0x00);
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, 2, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
 	sleep_us(LCD_DELAY);
 
 	len = strlen(s);
 	len = (len>(16-x))?(16-x):len;
 	txdata[0] = LCD_DATA; 
 	for(i=0; i<len; i++) txdata[i+1]=s[i];
-	i2c_write_blocking(i2c0, I2C_LCD, txdata, len+1, false);
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, len+1, false);
 	sleep_us(LCD_DELAY);
 }
 

@@ -9,9 +9,6 @@
  * See lcd.c for more information 
  */
 
-#include "pico/stdlib.h"
-#include "hardware/i2c.h"
-
 void lcd_init(void);
 void lcd_clear(void);
 void lcd_curxy(uint8_t x, uint8_t y, bool on);

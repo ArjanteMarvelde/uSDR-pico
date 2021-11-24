@@ -9,6 +9,8 @@
  * See hmi.c for more information 
  */
 
+extern bool ptt_active;
+
 void hmi_init(void);
 void hmi_evaluate(void);
 

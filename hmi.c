@@ -37,6 +37,7 @@
 #include "hmi.h"
 #include "dsp.h"
 #include "si5351.h"
+#include "relay.h"
 
 /*
  * GPIO assignments
@@ -66,11 +67,12 @@
  *   using Left/Right for digit and ENC for value, Enter to commit change.
  * Press ESC to enter the submenu states (there is only one sub menu level):
  *
- * Submenu	Values						ENC		Enter			Escape	Left	Right
- * -------------------------------------------------------------------------------------
- * Mode		USB, LSB, AM, CW			change	commit			exit	prev	next
- * AGC		Fast, Slow, Off				change	commit			exit	prev	next
- * Pre		+10dB, 0, -10dB, -20dB		change	commit			exit	prev	next
+ * Submenu	Values								ENC		Enter			Escape	Left	Right
+ * -----------------------------------------------------------------------------------------------
+ * Mode		USB, LSB, AM, CW					change	commit			exit	prev	next
+ * AGC		Fast, Slow, Off						change	commit			exit	prev	next
+ * Pre		+10dB, 0, -10dB, -20dB, -30dB		change	commit			exit	prev	next
+ * Vox		NoVOX, Low, Medium, High			change	commit			exit	prev	next
  *
  * --will be extended--
  */
@@ -80,7 +82,9 @@
 #define HMI_S_MODE			1
 #define HMI_S_AGC			2
 #define HMI_S_PRE			3
-#define HMI_NSTATES			4
+#define HMI_S_VOX			4
+#define HMI_S_BPF			5
+#define HMI_NSTATES			6
 
 /* Event definitions */
 #define HMI_E_NOEVENT		0
@@ -97,14 +101,18 @@
 /* Sub menu option string sets */
 #define HMI_NMODE	4
 #define HMI_NAGC	3
-#define HMI_NPRE	4
-char hmi_o_menu[HMI_NSTATES][8] = {"Tune","Mode","AGC ","Pre "};		// Indexed by hmi_state
-char hmi_o_mode[HMI_NMODE][8] = {"USB", "LSB", "AM ", "CW "};			// Indexed by hmi_sub[HMI_S_MODE]
-char hmi_o_agc [HMI_NAGC][8] = {"NoGC", "Slow", "Fast"};				// Indexed by hmi_sub[HMI_S_AGC]
-char hmi_o_pre [HMI_NPRE][8] = {"-20dB", "-10dB", "0dB", "+10dB"};		// Indexed by hmi_sub[HMI_S_PRE]
+#define HMI_NPRE	5
+#define HMI_NVOX	4
+#define HMI_NBPF	5
+char hmi_o_menu[HMI_NSTATES][8] = {"Tune","Mode","AGC","Pre","VOX"};	// Indexed by hmi_state
+char hmi_o_mode[HMI_NMODE][8] = {"USB","LSB","AM","CW"};				// Indexed by hmi_sub[HMI_S_MODE]
+char hmi_o_agc [HMI_NAGC][8] = {"NoGC","Slow","Fast"};					// Indexed by hmi_sub[HMI_S_AGC]
+char hmi_o_pre [HMI_NPRE][8] = {"-30dB","-20dB","-10dB","0dB","+10dB"};	// Indexed by hmi_sub[HMI_S_PRE]
+char hmi_o_vox [HMI_NVOX][8] = {"NoVOX","VOX-L","VOX-M","VOX-H"};		// Indexed by hmi_sub[HMI_S_VOX]
+char hmi_o_test[HMI_NBPF][8] = {"<2.5","2-6","5-12","10-24","20-40"};
 
 uint8_t  hmi_state, hmi_option;											// Current state and option selection
-uint8_t  hmi_sub[HMI_NSTATES] = {4,0,0,0};								// Stored option selection per state
+uint8_t  hmi_sub[HMI_NSTATES] = {4,0,0,3,0,0};							// Stored option selection per state
 
 uint32_t hmi_freq;														// Frequency from Tune state
 uint32_t hmi_step[6] = {10000000, 1000000, 100000, 10000, 1000, 100};	// Frequency digit increments
@@ -112,6 +120,10 @@ uint32_t hmi_step[6] = {10000000, 1000000, 100000, 10000, 1000, 100};	// Frequen
 #define HMI_MINFREQ		     100
 #define HMI_MULFREQ            1										// Factor between HMI and actual frequency
 																		// Set to 2 for certain types of mixer
+
+#define PTT_DEBOUNCE	3												// Nr of cycles for debounce
+int ptt_state;															// Debounce counter
+bool ptt_active;														// Resulting state
 
 /*
  * Some macros
@@ -201,12 +213,50 @@ void hmi_handler(uint8_t event)
 	case HMI_S_PRE:
 		if (event==HMI_E_ENTER)
 		{
-			// Set PRE
+			if (hmi_option == 0) relay_setattn(0x03);					// {"-30dB","-20dB","-10dB","0dB","+10dB"}
+			if (hmi_option == 1) relay_setattn(0x01);
+			if (hmi_option == 2) relay_setattn(0x02);
+			if (hmi_option == 3) relay_setattn(0x00);
+			if (hmi_option == 4) relay_setattn(0x04);
 			hmi_sub[hmi_state] = hmi_option;							// Store selected option	
 		}
 		if (event==HMI_E_INCREMENT)
 		{
 			hmi_option = (hmi_option<HMI_NPRE-1)?hmi_option+1:HMI_NPRE-1;
+		}
+		if (event==HMI_E_DECREMENT)
+		{
+			hmi_option = (hmi_option>0)?hmi_option-1:0;
+		}
+		break;
+	case HMI_S_VOX:
+		if (event==HMI_E_ENTER)
+		{
+			dsp_setvox(hmi_option);
+			hmi_sub[hmi_state] = hmi_option;							// Store selected option	
+		}
+		if (event==HMI_E_INCREMENT)
+		{
+			hmi_option = (hmi_option<HMI_NVOX-1)?hmi_option+1:HMI_NVOX-1;
+		}
+		if (event==HMI_E_DECREMENT)
+		{
+			hmi_option = (hmi_option>0)?hmi_option-1:0;
+		}
+		break;
+	case HMI_S_BPF:
+		if (event==HMI_E_ENTER)
+		{
+			if (hmi_option == 0) relay_setattn(0x01);					// {"<2.5","2-6","5-12","10-24","20-40"}
+			if (hmi_option == 1) relay_setattn(0x02);
+			if (hmi_option == 2) relay_setattn(0x04);
+			if (hmi_option == 3) relay_setattn(0x08);
+			if (hmi_option == 4) relay_setattn(0x10);
+			hmi_sub[hmi_state] = hmi_option;							// Store selected option	
+		}
+		if (event==HMI_E_INCREMENT)
+		{
+			hmi_option = (hmi_option<HMI_NBPF-1)?hmi_option+1:HMI_NBPF-1;
 		}
 		if (event==HMI_E_DECREMENT)
 		{
@@ -263,12 +313,16 @@ void hmi_callback(uint gpio, uint32_t events)
 		if (events&GPIO_IRQ_EDGE_FALL)
 			evt = HMI_E_RIGHT;
 		break;
+/*
 	case GP_PTT:									// PTT
 		if (events&GPIO_IRQ_EDGE_FALL)
-			DSP_SETPTT(true);
+			ptt_active = true;
 		else
-			DSP_SETPTT(false);
+			// This event needs to be detected better, to prevent hanging in TX state
+			// 10nF also helps suppressing the ripple...
+			ptt_active = false;
 		return;
+*/
 	default:
 		return;
 	}
@@ -286,7 +340,9 @@ void hmi_init(void)
 	 * The callback handles interrupts for all GPIOs with IRQ enabled.
 	 * Level interrupts don't seem to work properly.
 	 * For debouncing, the GPIO pins should be pulled-up and connected to gnd with 100nF.
+	 * PTT has separate debouncing logic
 	 */
+	 
 	// Init input GPIOs
 	gpio_init_mask(GP_MASK_IN);
 	
@@ -305,7 +361,7 @@ void hmi_init(void)
 	gpio_set_irq_enabled(GP_AUX_1, GPIO_IRQ_EDGE_ALL, true);
 	gpio_set_irq_enabled(GP_AUX_2, GPIO_IRQ_EDGE_ALL, true);
 	gpio_set_irq_enabled(GP_AUX_3, GPIO_IRQ_EDGE_ALL, true);
-	gpio_set_irq_enabled(GP_PTT, GPIO_IRQ_EDGE_ALL, true);
+	//gpio_set_irq_enabled(GP_PTT, GPIO_IRQ_EDGE_ALL, true);
 
 	// Set callback, one for all GPIO, not sure about correctness!
 	gpio_set_irq_enabled_with_callback(GP_ENC_A, GPIO_IRQ_EDGE_ALL, true, hmi_callback);
@@ -315,8 +371,11 @@ void hmi_init(void)
 	hmi_option = 4;									// Active kHz digit
 	hmi_freq = 7074000UL;							// Initial frequency
 
-	SI_SETFREQ(0, HMI_MULFREQ*hmi_freq);			// Set freq to 7074 kHz
-	SI_SETPHASE(0, 1);								// Set phase to 90deg
+	SI_SETFREQ(0, HMI_MULFREQ*hmi_freq);			// Set freq to 7074 kHz (depends on mixer type)
+	SI_SETPHASE(0, 1);								// Set phase to 90deg (depends on mixer type)
+	
+	ptt_state = 0;
+	ptt_active = false;
 }
 
 /*
@@ -328,14 +387,14 @@ void hmi_evaluate(void)
 	char s[32];
 	
 	// Print top line of display
-	sprintf(s, "%s %7.1f %c%3d", hmi_o_mode[hmi_sub[HMI_S_MODE]], (double)hmi_freq/1000.0, (tx_enabled?'T':'R'),920);
+	sprintf(s, "%s %7.1f %c%3d", hmi_o_mode[hmi_sub[HMI_S_MODE]], (double)hmi_freq/1000.0, (tx_enabled?0x07:0x06), (tx_enabled?0:920));
 	lcd_writexy(0,0,s);
 	
 	// Print bottom line of dsiplay, depending on state
 	switch (hmi_state)
 	{
 	case HMI_S_TUNE:
-		sprintf(s, "     %s  %s", hmi_o_agc[hmi_sub[HMI_S_AGC]], hmi_o_pre[hmi_sub[HMI_S_PRE]]);
+		sprintf(s, "%s %s %s", hmi_o_vox[hmi_sub[HMI_S_VOX]], hmi_o_agc[hmi_sub[HMI_S_AGC]], hmi_o_pre[hmi_sub[HMI_S_PRE]]);
 		lcd_writexy(0,1,s);	
 		lcd_curxy(4+(hmi_option>4?6:hmi_option), 0, true);
 		break;
@@ -354,10 +413,36 @@ void hmi_evaluate(void)
 		lcd_writexy(0,1,s);	
 		lcd_curxy(8, 1, false);
 		break;
+	case HMI_S_VOX:
+		sprintf(s, "Set VOX: %s        ", hmi_o_vox[hmi_option]);
+		lcd_writexy(0,1,s);	
+		lcd_curxy(8, 1, false);
+		break;
+	case HMI_S_BPF:
+		sprintf(s, "Band: %d %s        ", hmi_option, hmi_o_test[hmi_option]);
+		lcd_writexy(0,1,s);	
+		lcd_curxy(8, 1, false);
 	default:
 		break;
 	}
 	
-	SI_SETFREQ(0, hmi_freq);						// Set freq to latest 
+	/* PTT debouncing */
+	if (gpio_get(GP_PTT))							// Get PTT level
+	{
+		if (ptt_state<PTT_DEBOUNCE)					// Increment debounce counter when high
+			ptt_state++;
+	}
+	else 
+	{
+		if (ptt_state>0)							// Decrement debounce counter when low
+			ptt_state--;
+	}
+	if (ptt_state == PTT_DEBOUNCE)					// Reset PTT when debonced level high
+		ptt_active = false;
+	if (ptt_state == 0)								// Set PTT when debounced level low
+		ptt_active = true;
+	
+	/* Set freq to latest entered value */
+	SI_SETFREQ(0, HMI_MULFREQ*hmi_freq);
 }
 

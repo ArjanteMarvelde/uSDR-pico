@@ -19,7 +19,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(uSDR uSDR.c lcd.c si5351.c dsp.c hmi.c monitor.c)
+add_executable(uSDR uSDR.c lcd.c si5351.c dsp.c hmi.c monitor.c relay.c)
 
 pico_set_program_name(uSDR "uSDR")
 pico_set_program_version(uSDR "0.1")

@@ -16,6 +16,7 @@
 
 void dsp_setagc(int agc);
 void dsp_setmode(int mode);
+void dsp_setvox(int vox);
 
 extern volatile bool tx_enabled;
 #define DSP_SETPTT(on)			tx_enabled = (on)
