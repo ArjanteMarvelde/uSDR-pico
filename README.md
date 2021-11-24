@@ -34,11 +34,14 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 - [x] add some more filtering
 - [x] implement the user I/O bit: LCD+Rotary encoder+buttons
 - [x] implement AGC 
+- [x] implement LSB
+- [x] implement AM
+- [x] SW based VOX
 - [ ] implement RSSI
-- [ ] implement LSB
-- [ ] implement AM
-- [x] sort out the surrounding HW
-- [x] maybe design a PCB?
+- [x] design a set of PCBs
+- [ ] sort out the new HW modules
+- [ ] improve speed: better dual-core management for memory and timer 
+- [ ] add control for new HW: BPF and pre-amp/attenuator switching
 
 ## Installing and using the SDK for Windows: 
 Please refer to https://github.com/ndabas/pico-setup-windows/releases where the latest installer can be downloaded (e.g. **pico-setup-windows-0.3-x64.exe**).  
@@ -60,7 +63,7 @@ For calculating filters I have used the free software from Iowa Hills (http://ww
 I also used the online FIR filter calculator T-Filter (http://t-filter.engineerjs.com/) 
 
 # Copyright notice
-The code and eletronic designs as well as the implementations presented in this Git can be copied and modified freely for non-commercial use.
-Utilisation for commercial purposes is allowed as well, as long as a reference to the original source is included in the product.
+The code and electronic designs as well as the implementations presented in this reposiory can be copied and modified freely, for non-commercial use.
+Use for commercial purposes is allowed as well, as long as a reference to this repository is included in the product.
 
 
