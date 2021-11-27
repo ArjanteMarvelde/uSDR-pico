@@ -34,7 +34,8 @@
 #include "hardware/timer.h"
 #include "hardware/clocks.h"
 
-#define ADC0_IRQ_FIFO 22
+#define ADC0_IRQ_FIFO 		22		// FIFO IRQ number
+#define GP_PTT				15		// PTT pin 20 (GPIO 15)
 
 #include "dsp.h"
 #include "hmi.h"
@@ -158,7 +159,7 @@ int16_t lpf15_62[15] = { -1,  3, 12,  6,-12, -4, 40, 69, 40, -4,-12,  6, 12,  3,
 
 volatile uint16_t dac_iq, dac_audio;
 volatile uint32_t fifo_overrun, fifo_rx, fifo_tx, fifo_xx, fifo_incnt;
-volatile bool tx_enabled;
+volatile bool tx_enabled, vox_active;
 
 
 
@@ -280,7 +281,7 @@ bool rx(void)
 	
 
 	/*** DEMODULATION ***/
-	switch(dsp_mode)
+	switch (dsp_mode)
 	{
 	case 0:											//USB
 		/* 
@@ -391,20 +392,20 @@ bool vox(void)
 	if (a_sample<0) a_sample = -a_sample;			// Absolute value
 	a_level += (a_sample - a_level)/128;			//   running average, 16usec * 128 = 2msec
 
-	if (vox_level != VOX_OFF)
+	if (vox_level != VOX_OFF)						// Only when VOX is enabled
 	{
 		if (a_level > vox_level)
 		{
-			vox_count = VOX_LINGER;
-			return(true);
+			vox_count = VOX_LINGER;					// While audio present, reset linger timer
+			return(true);							//  and keep TX active
 		}
 		if (vox_count>0)
 		{
-			vox_count--;
-			return(true);
+			vox_count--;							// No audio; decrement linger timer
+			return(true);							//  but keep TX active
 		}
 	}
-	return(false);
+	return(false);									// All other cases: no TX
 }
 
 bool tx(void) 
@@ -490,7 +491,7 @@ void dsp_loop()
 	adc_select_input(0);							// Start with ADC0
 	adc_next = 0;
 	
-	adc_set_round_robin(1+2+4);						// Sequence ADC 0-1-2 free running
+	adc_set_round_robin(0x01+0x02+0x04);			// Sequence ADC 0-1-2 (GP 26, 27, 28) free running
 	adc_fifo_setup(true,false,1,false,false);		// IRQ for every result (fifo threshold = 1)
     irq_set_exclusive_handler(ADC0_IRQ_FIFO, adcfifo_handler);
 	adc_irq_set_enabled(true);
@@ -504,11 +505,20 @@ void dsp_loop()
     while(1) 
 	{
         cmd = multicore_fifo_pop_blocking();		// Wait for fifo output
-		tx_enabled = ptt_active || vox();			// Sample audio and check level
+
+		tx_enabled = ptt_active || vox();			// Sample audio and check level	
 		if (tx_enabled)
+		{
+			if (vox_level != VOX_OFF) 				// Only when vox is enabled
+				gpio_put(GP_PTT, false);			//     drive PTT low (active)
 			tx();
+		}
 		else
+		{
+			if (vox_level != VOX_OFF)  				// Only when vox is enabled
+				gpio_put(GP_PTT, true);				//     drive PTT high (inactive)
 			rx();
+		}
  		if (multicore_fifo_rvalid()) 
 			fifo_overrun++;							// Check for missed events
    }

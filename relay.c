@@ -33,9 +33,11 @@
 void relay_setband(uint8_t val)
 {
 	uint8_t data[2];
+	int ret;
 	
 	data[0] = val&0x1f;
-	i2c_write_blocking(i2c1, I2C_BPF, data, 1, false);
+	if (i2c_write_blocking(i2c1, I2C_BPF, data, 1, false) < 0)
+		i2c_write_blocking(i2c1, I2C_BPF, data, 1, false);
 }
 
 int relay_getband(void)
@@ -54,7 +56,8 @@ void relay_setattn(uint8_t val)
 	uint8_t data[2];
 	
 	data[0] = val&0x07;
-	i2c_write_blocking(i2c1, I2C_RX, data, 1, false);
+	if (i2c_write_blocking(i2c1, I2C_RX, data, 1, false) < 0)
+		i2c_write_blocking(i2c1, I2C_RX, data, 1, false);
 }
 
 int relay_getattn(void)
@@ -70,8 +73,7 @@ int relay_getattn(void)
 
 void relay_init(void)
 { 
-	relay_setattn(0);
-	relay_setband(0);
 	relay_setattn(REL_PRE_10);
+	sleep_ms(1);
 	relay_setband(REL_BPF12);
 }

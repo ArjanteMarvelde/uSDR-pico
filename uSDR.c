@@ -30,7 +30,7 @@
 #include "relay.h"
 
 #define LED_MS		1000
-#define LOOP_MS		10
+#define LOOP_MS		100
 
 #define I2C0_SDA	16
 #define I2C0_SCL	17
@@ -95,9 +95,9 @@ int main()
 	mon_init();										// Monitor shell on stdio
 	si_init();										// VFO control unit
 	dsp_init();										// Signal processing unit
+	relay_init();
 	lcd_init();										// LCD output unit
 	hmi_init();										// HMI user inputs
-	relay_init();
 	
 	/* A simple round-robin scheduler */
 	sem_init(&loop_sem, 1, 1) ;	

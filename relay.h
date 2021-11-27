@@ -18,6 +18,7 @@
 #define REL_ATT_30	0x03
 #define REL_ATT_20	0x01
 #define REL_ATT_10	0x02
+#define REL_ATT_00	0x00
 #define REL_PRE_10	0x04
 
 extern void relay_setband(uint8_t val);
