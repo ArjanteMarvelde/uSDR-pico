@@ -5,7 +5,7 @@ Furthermore, the repository contains the electronic design of some modules that 
 Please see the doc folder for a full description.
 
 The platform used is a Pi Pico module with an RP2040 processor. This processor has dual cores, running at 125MHz each and very configurable I/O, which eases the HW design.
-The software is distributed over the two cores: core-0 takes care of all user I/O and control functions, while core-1 performs all of the signal processing. The core-1 functionality consists of a TX-branch and an RX-branch, each called from a function that waits for inter-core FIFO words popping out. This happens every 16usec, because on core-0 a 16usec timer callback ISR pushes the RX/TX status into that FIFO. Hence the signal processing rythm on core-1 effectively is 62.5kHz.  
+The software is distributed over the two cores: *core0* takes care of all user I/O and control functions, while *core1* performs all of the signal processing. The *core1* functionality consists of a TX-branch and an RX-branch, each called from a function that waits for inter-core FIFO words popping out. This happens every 16usec, because on *core0* a 16usec timer callback ISR pushes the RX/TX status into that FIFO. Hence the signal processing rythm on *core1* effectively is 62.5kHz.  
 On *core1* the three ADC channels are continuously sampled at maximum speed in round-robin mode. Samples are therefore taken every 6usec for each channel, maximum jitter between I and Q channels is 4usec, which has a negligible effect in the audio domain.  
 
 The TX-branch 
