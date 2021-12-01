@@ -39,7 +39,7 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 - [x] SW based VOX
 - [ ] implement RSSI
 - [x] design a set of PCBs
-- [ ] sort out the new HW modules
+- [x] sort out the new HW modules
 - [ ] improve speed: better dual-core management for memory and timer 
 - [x] add control for new HW: BPF and pre-amp/attenuator switching
 
@@ -52,10 +52,10 @@ Clone/copy the uSDR-pico code files into a subdirectory, e.g. **$PICO/uSDR-pico*
 Create the build folder: **$PICO/uSDR-pico/build**  
 
 Before doing any building you need to adapt the file **$PICO/uSDR-pico/CMakeLists.txt**, using your favourite editor, to reflect your own directory structure. Also, select whether you want **stdio** to use the UART on pins 1 and 2 or the USB serial port. The monitor terminal is on **stdio**.  
-In **$PICO/** you will find a command to start a Developer Command Prompt (*DCP*, like a "DOS box"), make sure to use this one instead of any other DOS box. Within this DCP all environment settings are initialized to enable building.  
-In the DCP window, chdir to the **build** folder and execute: **cmake -G "NMake Makefiles" ..**  , do not forget the trailing dots.
-Now you have initialized the make environment (for nmake), and by executing **nmake** in that same **build** folder, the Pi Pico loadable file **uSDR.uf2** is created.  
-Rebooting the Pico while the bootsel button is pressed will open a file explorer window with the Pico as a Mass Storage Device. Moving the binary to the Pico is as easy as dragging and dropping this uf2 file into that MSD.  
+In **$PICO/** you will find a command to start a Developer Command Prompt (*DCP*, like a "DOS box"), make sure to use this one instead of any other DOS box. Within this *DCP* all environment settings have been properly pre-set to enable building.  
+In the *DCP* window, chdir to the **build** folder and execute: **cmake -G "NMake Makefiles" ..**   (do not forget the trailing dots).
+Now you have initialized the make environment (for *nmake*) and by executing **nmake** in that same **build** folder, all SDK libraries and finally the Pi Pico loadable file **uSDR.uf2** will be created.  
+Rebooting the Pico while the bootsel button is pressed will open a file explorer window with the Pico shown as a Mass Storage Device (e.g. drive E:). Moving the binary to the Pico is as easy as dragging and dropping this uf2 file into that MSD.  
 
 # Background
 The folder **$PICO/docs** also contains some manuals, of which the *C-SDK description*, the *RP2040 datasheet* and the *Pico Pinout* are absolute must-reads when you start writing software.  
@@ -63,7 +63,7 @@ For calculating filters I have used the free software from Iowa Hills (http://ww
 I also used the online FIR filter calculator T-Filter (http://t-filter.engineerjs.com/) 
 
 # Copyright notice
-The code and electronic designs as well as the implementations presented in this repository can be copied and modified freely, for non-commercial use.
-Use for commercial purposes is allowed as well, as long as a reference to this repository is included in the product.
+**The code and electronic designs as well as the implementations presented in this repository can be copied and modified freely, for non-commercial use.
+Use for commercial purposes is allowed as well, as long as a reference to this repository is included in the product.**
 
 
