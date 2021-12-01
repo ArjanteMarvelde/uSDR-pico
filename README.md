@@ -6,7 +6,7 @@ Please see the doc folder for a full description.
 
 The platform used is a Pi Pico module with an RP2040 processor. This processor has dual cores, running at 125MHz each and very configurable I/O, which eases the HW design.
 The software is distributed over the two cores: core-0 takes care of all user I/O and control functions, while core-1 performs all of the signal processing. The core-1 functionality consists of a TX-branch and an RX-branch, each called from a function that waits for inter-core FIFO words popping out. This happens every 16usec, because on core-0 a 16usec timer callback ISR pushes the RX/TX status into that FIFO. Hence the signal processing rythm on core-1 effectively is 62.5kHz.  
-On core-1 the three ADC channels are continuously sampled at maximum speed in round-robin mode. Samples are therefore taken every 6usec for each channel, maximum jitter between I and Q channels is 4usec, which has a negligible effect in the audio domain.  
+On *core1* the three ADC channels are continuously sampled at maximum speed in round-robin mode. Samples are therefore taken every 6usec for each channel, maximum jitter between I and Q channels is 4usec, which has a negligible effect in the audio domain.  
 
 The TX-branch 
 - takes latest audio audio sample input from ADC2 (rate = 62.5 kHz), 
@@ -16,15 +16,15 @@ The TX-branch
 - scales, filters and outputs I and Q samples on PWM based DACs, towards QSE output
  
 The RX-branch
-- takes latest I and Q samples from QSD on ADC0 and ADC1 (rate = 62.5 kHz)
+- takes latest Q and I samples from QSD on ADC0 and ADC1 (rate = 62.5 kHz)
 - applies a low-pass filter at Fc=3kHz, 
 - reduces sampling by 4 to get better low frequency response Hilbert xform (rate = 15.625 kHz), 
-- demodulates:
+- demodulates, e.g. SSB:
 -- applies 15-tap DHT on Q channel and 7 sample delay on I channel
 -- subtracts I and Q samples
 - scales, filters and outputs audio on an PWM based DAC, towards audio output
 
-On core0 the main loop takes care of user I/O, all other controls and the monitor port. There is also a LED flashing timer callback functioning as a heartbeat.
+On *core0* the main loop takes care of user I/O, all other controls and the monitor port. There is also a LED flashing timer callback functioning as a heartbeat.
 
 The Pico controls an Si5351A clock module to obtain the switching clock for the QSE and QSD. The module outputs two synchronous square wave clocks on ch 0 and 1, whith selectable phase difference (0, 90, 180 or 270 degrees). The clock on ch2 is free to be used for other goals. The module is controlled over the **i2c0** channel.
 The display is a standard 16x2 LCD, but with an I2C interface. The display is connected through the **i2c1** channel, as well as the bus expanders for controlling the various relays.
