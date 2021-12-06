@@ -12,13 +12,14 @@
  * The RX branch:
  * - Sample I and Q QSD channels, and shift into I and Q delay line (62.5 kHz per channel)
  * - Low pass filter: Fc=4kHz
- * - Quarter rate (15.625 kHz) to improve low F behavior of Hilbert transform
+ * - Quarter rate (15.625 kHz) to improve low freq behavior of Hilbert transform
  * - Calculate 15 tap Hilbert transform on Q
- * - Demodulate, SSB: Q - I, taking proper delays into account
+ * - Demodulate, taking proper delays into account
  * - Push to Audio output DAC
  *
- * The TX branch:
- * - Sample the Audio input channel (62.5 kHz)
+ * Always perform audio sampling (62.5kHz) and level detections, in case of VOX active
+ *
+ * The TX branch (if VOX or PTT):
  * - Low pass filter: Fc=3kHz
  * - Eight rate (7.8125 kHz) to improve low F behavior of Hilbert transform
  * - Generate Q samples by doing a Hilbert transform
@@ -148,7 +149,7 @@ void dsp_setvox(int vox)
 /* 
  * Low pass filters Fc=3, 7 and 15 kHz (see http://t-filter.engineerjs.com/)
  * Settings: sample rates 62500, 31250 or 15625 Hz, stopband -40dB, passband ripple 5dB
- * Note: 8 bit precision, so divide sum by 256 
+ * Note: 8 bit precision, so divide sum by 256 (this could be improved when 32bit accumulator)
  */
 int16_t lpf3_62[15] =  {  3,  3,  5,  7,  9, 10, 11, 11, 11, 10,  9,  7,  5,  3,  3};	// Pass: 0-3000, Stop: 6000-31250
 int16_t lpf3_31[15] =  { -2, -3, -3,  1, 10, 21, 31, 35, 31, 21, 10,  1, -3, -3, -2};	// Pass: 0-3000, Stop: 6000-15625
@@ -410,44 +411,79 @@ bool vox(void)
 
 bool tx(void) 
 {
-	int32_t a_accu;
+	int32_t a_accu, q_accu;
 	int16_t qh;
 	int i;
+	uint16_t i_dac, q_dac;
 		
 	/*** RAW Audio SAMPLES from VOX function ***/
-
-	/*
-	 * Low pass filter + decimation
-	 */
+	/*** Low pass filter + decimation ***/
 	tx_cnt = (tx_cnt+1)&3;							// Calculate only every fourth sample
 	if (tx_cnt>0) return true;						//   So effective sample rate will be 15625Hz
-	
-	for (i=0; i<14; i++) 							// Shift decimated samples
-		a_s[i] = a_s[i+1];
 
 	a_accu = 0;										// Initialize accumulator
 	for (i=0; i<15; i++)							// Low pass FIR filter, using raw samples
 		a_accu += (int32_t)a_s_raw[i]*lpf3_62[i];	//   Fc=3kHz, at 62.5 kHz sampling		
-	a_s[14] = a_accu / 256;
-
-	/*
-	 * From here things get dependent on transmit mode.
-	 * We assume USB for now, e.g. supporting FT8
-	 */
 		
-	/* 
-	 * Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills):
-	 */	
-	a_accu = (a_s[0]-a_s[14])*315L + (a_s[2]-a_s[12])*440L + (a_s[4]-a_s[10])*734L + (a_s[6]-a_s[ 8])*2202L;
-	qh = (int16_t)(a_accu / 4096);	 
+	for (i=0; i<14; i++) 							// Shift decimated samples
+		a_s[i] = a_s[i+1];
+	a_s[14] = a_accu / 256;							// Store rescaled accumulator
+
+	/*** MODULATION ***/
+	switch (dsp_mode)
+	{
+	case 0:											// USB
+		/* 
+		 * qh is Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills calculator)
+		 */	
+		q_accu = (a_s[0]-a_s[14])*315L + (a_s[2]-a_s[12])*440L + (a_s[4]-a_s[10])*734L + (a_s[6]-a_s[ 8])*2202L;
+		qh = -(q_accu / 4096L);						// USB: sign is negative
+		break;
+	case 1:											// LSB
+		/* 
+		 * qh is Classic Hilbert transform 15 taps, 12 bits (see Iowa Hills calculator)
+		 */	
+		q_accu = (a_s[0]-a_s[14])*315L + (a_s[2]-a_s[12])*440L + (a_s[4]-a_s[10])*734L + (a_s[6]-a_s[ 8])*2202L;
+		qh = q_accu / 4096L;						// LSB: sign is positive
+		break;
+	case 2:											// AM
+		/*
+		 * I and Q values are identical
+		 */
+		qh = a_s[7];
+		break;
+	default:
+		break;
+	}
 
 	/* 
-	 * Write I and Q to QSE DACs, phase is 7 back.
-	 * Need to multiply AC with DAC_RANGE/ADC_RANGE (appr 1/16, but compensate for losses)
+	 * Write I and Q to QSE DACs, phase is 7 samples back.
+	 * Need to multiply AC with DAC_RANGE/ADC_RANGE (appr 1/8)
+	 * Any case: clip to range
 	 */
-	pwm_set_chan_level(dac_iq, PWM_CHAN_A, DAC_BIAS + (qh/4));
-	pwm_set_chan_level(dac_iq, PWM_CHAN_B, DAC_BIAS + (a_s[7]/4));
-
+	a_accu = DAC_BIAS - (qh/8);
+	if (a_accu<0)
+		q_dac = 0;
+	else if (a_accu>(DAC_RANGE-1))
+		q_dac = DAC_RANGE-1;
+	else
+		q_dac = a_accu;
+	
+	a_accu = DAC_BIAS + (a_s[7]/8);
+	if (a_accu<0)
+		i_dac = 0;
+	else if (a_accu>(DAC_RANGE-1))
+		i_dac = DAC_RANGE-1;
+	else
+		i_dac = a_accu;
+		
+	// pwm_set_both_levels(dac_iq, q_dac, i_dac);		// Set both channels of the IQ slice simultaneously
+	// pwm_set_chan_level(dac_iq, PWM_CHAN_A, q_dac);
+	// pwm_set_chan_level(dac_iq, PWM_CHAN_B, i_dac);
+	pwm_set_gpio_level(21, i_dac);
+	pwm_set_gpio_level(20, q_dac);
+	
+	
 	return true;
 }
 
@@ -468,18 +504,18 @@ void dsp_loop()
 	fifo_xx = 0;
 	fifo_incnt++;
 
-	/* Initialize DACs */
+	/* Initialize DACs, default mode is free running, A and B pins are output */
 	gpio_set_function(20, GPIO_FUNC_PWM);			// GP20 is PWM for Q DAC (Slice 2, Channel A)
 	gpio_set_function(21, GPIO_FUNC_PWM);			// GP21 is PWM for I DAC (Slice 2, Channel B)
 	dac_iq = pwm_gpio_to_slice_num(20);				// Get PWM slice for GP20 (Same for GP21)
-	pwm_set_clkdiv_int_frac (dac_iq, 1, 0);			// clock divide by 1
-	pwm_set_wrap(dac_iq, DAC_RANGE-1);				// Set cycle length
+	pwm_set_clkdiv_int_frac (dac_iq, 1, 0);			// clock divide by 1: 125MHz
+	pwm_set_wrap(dac_iq, DAC_RANGE-1);				// Set cycle length; nr of counts until wrap, i.e. 125/DAC_RANGE MHz
 	pwm_set_enabled(dac_iq, true); 					// Set the PWM running
 	
 	gpio_set_function(22, GPIO_FUNC_PWM);			// GP22 is PWM for Audio DAC (Slice 3, Channel A)
 	dac_audio = pwm_gpio_to_slice_num(22);			// Find PWM slice for GP22
-	pwm_set_clkdiv_int_frac (dac_audio, 1, 0);		// clock divide by 1
-	pwm_set_wrap(dac_audio, DAC_RANGE-1);			// Set cycle length
+	pwm_set_clkdiv_int_frac (dac_audio, 1, 0);		// clock divide by 1: 125MHz
+	pwm_set_wrap(dac_audio, DAC_RANGE-1);			// Set cycle length; nr of counts until wrap, i.e. 125/DAC_RANGE MHz
 	pwm_set_enabled(dac_audio, true); 				// Set the PWM running
 
 	/* Initialize ADCs */
@@ -501,6 +537,7 @@ void dsp_loop()
 	// Consider using alarm_pool_add_repeating_timer_us() for a core1 associated timer
 	// First create an alarm pool on core1: alarm_pool_create(HWalarm, Ntimers)
 	// For the core1 alarm pool don't use default HWalarm (usually 3) but e.g. 1
+	// Timer callback signals semaphore, while loop blocks on getting it
 	
     while(1) 
 	{
@@ -546,7 +583,7 @@ bool dsp_callback(struct repeating_timer *t)
  * CORE0: 
  * Initialize dsp context and spawn CORE1 process 
  *
- * Some CORE1 code parts should not run from Flash, but be loaded in SRAM at boot
+ * Some CORE1 code parts should not run from Flash, but be loaded in SRAM at boot time
  * See platform.h for function qualifier macro's
  * for example: 
  * void __not_in_flash_func(funcname)(int arg1, float arg2)
