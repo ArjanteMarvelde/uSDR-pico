@@ -4,29 +4,20 @@
  * Created: Mar 2021
  * Author: Arjan te Marvelde
  * 
- * Grove 16x2 LCD, HD44780 chip with JHD1804 I2C interface
+ * Select LCD_TYPE:
+ * 
+ * Grove 16x2 LCD HD44780, with integrated JHD1804 I2C bridge (@ 0x3E)
  * Display RAM addresses 0x00-0x1f for top row and 0x40-0x5f for bottom row
- * Character Generator addresses are 0x00-0x07
+ * Available character Generator addresses are 0x00-0x07
  *
- * Character 0x00:
- *         +-+-+-+-+-+
- * 000000  | |1| | | |
- *         +-+-+-+-+-+
- * 000001  |1| | | | |
- *         +-+-+-+-+-+
- * 000010  | |1| | | |
- *         +-+-+-+-+-+
- * 000011  |1| | | | |
- *         +-+-+-+-+-+
- * 000100  | |1| | | |
- *         +-+-+-+-+-+
- * 000101  |1| | | | |
- *         +-+-+-+-+-+
- * 000110  | |1| | | |
- *         +-+-+-+-+-+
- * 000111  | | | | | |	<= do not use, cursor 
- *         +-+-+-+-+-+
- *
+ * Standard 16x2 LCD HD44780, with backpack PCF8574 based I2C bridge (@ 0x27)
+ * Same registers, but interface uses 4 bits for data/comand, in bits 3..7
+ * bit 0 is unused
+ * bit 1 is Register Select (0 for command, 1 for data)
+ * bit 2 is Enable, data/command is transferred on falling edge
+ * bit 3..6 data or command nibble (write high nibble first)
+ * bit 8 is backlight (1 for on)
+ * 
  */
 #include <stdio.h>
 #include <string.h>
@@ -36,10 +27,16 @@
 #include "hardware/clocks.h"
 #include "lcd.h"
 
+/* Select LCD type matching your HW */
+#define LCD_1804			0
+#define LCD_8574			1
+#define LCD_TYPE			LCD_1804
 
+/* I2C address */
+#define I2C_LCD 			0x3E
+//#define I2C_LCD			0x27
 
-
-
+/* HD44780 interface */
 // commands
 #define LCD_CLEARDISPLAY 	0x01					// Note: LCD_ENTRYINC is set
 #define LCD_RETURNHOME 		0x02
@@ -78,17 +75,20 @@
 #define LCD_5x10DOTS 		0x04
 #define LCD_5x8DOTS 		0x00
 
-#define LCD_DELAY			100
+#define LCD_DELAY			100							// Delay for regular write
 #define LCD_COMMAND			0x80
 #define LCD_DATA			0x40
 
-/* I2C address and pins */
-#define I2C_LCD 			0x3E
+/* 8574-based specific bitmasks */
+#define LCD2_BACKLIGHT		0x80
+#define LCD2_DATA			0x02
+#define LCD2_ENABLE			0x04
+
 
 /*
- * User defined characters
+ * User defined (CGRAM) characters
  */
-uint8_t cgram[8][8] = 									// Write CGRAM
+uint8_t cgram[8][8] = 
 { 
 	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},	// 0x00: blank
 	{0x00, 0x00, 0x00, 0x00, 0x00, 0x1f, 0x00, 0x00},	// 0x01: Level 1
@@ -100,133 +100,129 @@ uint8_t cgram[8][8] = 									// Write CGRAM
 	{0x04, 0x0e, 0x1f, 0x04, 0x04, 0x04, 0x00, 0x00}	// 0x07: Transmit arrow up
 };
 
+/*
+ * Transfer 1 byte to LCD
+ * This function is interface dependent
+ */
+void lcd_sendbyte(uint8_t command, uint8_t data)
+{
+#if LCD_TYPE == LCD_1804
+
+	uint8_t txdata[2];
+	// Write command/data flag and data byte
+	txdata[0] = (command?LCD_COMMAND:LCD_DATA); 
+	txdata[1] = data;
+	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
+	sleep_us(LCD_DELAY);
+		
+#elif LCD_TYPE == LCD_8574
+
+	uint8_t txdata;
+	// Write high nibble
+	txdata = (command?0:LCD2_DATA)|LCD2_ENABLE|((data&0xf0)<<1)|LCD2_BACKLIGHT;
+	i2c_write_blocking(i2c1, I2C_LCD, &txdata[0], 1, false);
+	sleep_us(LCD_DELAY);
+	tx_data &= ~LCD2_ENABLE;
+	i2c_write_blocking(i2c1, I2C_LCD, &txdata[0], 1, false);
+	sleep_us(LCD_DELAY);
+	tx_data |= LCD2_ENABLE;
+	sleep_us(LCD_DELAY);
+	// Write low nibble
+	txdata = (command?0:LCD2_DATA)|LCD2_ENABLE|((data&0xf0)>>3)|LCD2_BACKLIGHT;
+	i2c_write_blocking(i2c1, I2C_LCD, &txdata[0], 1, false);
+	sleep_us(LCD_DELAY);
+	tx_data &= ~LCD2_ENABLE;
+	i2c_write_blocking(i2c1, I2C_LCD, &txdata[0], 1, false);
+	sleep_us(LCD_DELAY);
+	tx_data |= LCD2_ENABLE;
+	sleep_us(LCD_DELAY);
+
+#endif
+}
 
 void lcd_init(void)
 { 
-	uint8_t txdata[10];
 	uint8_t i;
 	
-	sleep_ms(50);
-	txdata[0] = LCD_COMMAND; 
-	
+	sleep_ms(100);
+
+#if LCD_TYPE == LCD_1804
 	/* Initialize function set (see datasheet fig 23)*/
-	txdata[0] = LCD_COMMAND; 
-	txdata[1] = LCD_FUNCTIONSET | LCD_8BITMODE | LCD_2LINE | LCD_5x8DOTS;
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
+	lcd_sendbyte(true, LCD_FUNCTIONSET | LCD_8BITMODE | LCD_2LINE | LCD_5x8DOTS);
 	sleep_us(4500);
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(100);
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(LCD_DELAY);
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(LCD_DELAY);
+	lcd_sendbyte(true, LCD_FUNCTIONSET | LCD_8BITMODE | LCD_2LINE | LCD_5x8DOTS);
+	lcd_sendbyte(true, LCD_FUNCTIONSET | LCD_8BITMODE | LCD_2LINE | LCD_5x8DOTS);
+	lcd_sendbyte(true, LCD_FUNCTIONSET | LCD_8BITMODE | LCD_2LINE | LCD_5x8DOTS);
+#elif LCD_TYPE == LCD_8574
+	lcd_sendbyte(true, LCD_FUNCTIONSET | LCD_4BITMODE | LCD_2LINE | LCD_5x8DOTS);
+	sleep_us(4500);
+	lcd_sendbyte(true, LCD_FUNCTIONSET | LCD_4BITMODE | LCD_2LINE | LCD_5x8DOTS);
+	lcd_sendbyte(true, LCD_FUNCTIONSET | LCD_4BITMODE | LCD_2LINE | LCD_5x8DOTS);
+	lcd_sendbyte(true, LCD_FUNCTIONSET | LCD_4BITMODE | LCD_2LINE | LCD_5x8DOTS);
+#endif
 
 	/* Initialize display control */
-	txdata[0] = LCD_COMMAND; 
-	txdata[1] = LCD_DISPLAYCONTROL | LCD_DISPLAYOFF | LCD_CURSOROFF | LCD_BLINKOFF;
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(LCD_DELAY);
+	lcd_sendbyte(true, LCD_DISPLAYCONTROL | LCD_DISPLAYOFF | LCD_CURSOROFF | LCD_BLINKOFF);
 	
 	/* Display clear */
-	txdata[0] = LCD_COMMAND; 
-	txdata[1] = LCD_CLEARDISPLAY;
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(1530);
+	lcd_sendbyte(true, LCD_CLEARDISPLAY);
+	sleep_ms(2);
 
 	/* Initialize entry mode set */ 
-	txdata[0] = LCD_COMMAND; 
-	txdata[1] = LCD_ENTRYMODESET | LCD_ENTRYINC | LCD_ENTRYNOSHIFT;
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(LCD_DELAY);
+	lcd_sendbyte(true, LCD_ENTRYMODESET | LCD_ENTRYINC | LCD_ENTRYNOSHIFT);
 	
 	/* Load CGRAM */
 	for (i=0; i<8; i++)
 	{
-		txdata[0] = LCD_COMMAND; 
-		txdata[1] = LCD_SETCGRAMADDR | (i<<3); 								//Set CGRAM address
-		i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-		sleep_us(LCD_DELAY);
-		txdata[0] = LCD_DATA;
-		for (int j=0; j<8; j++) txdata[1+j] = cgram[i][j];
-		i2c_write_blocking(i2c1, I2C_LCD, txdata, 9, false);
-		sleep_us(LCD_DELAY);
+		lcd_sendbyte(true, LCD_SETCGRAMADDR | (i<<3));		//Set CGRAM address
+		for (int j=0; j<8; j++)
+			lcd_sendbyte(false, cgram[i][j]);				// One byte at a time
 	}
 	
 	/* Initialize display control */
-	txdata[0] = LCD_COMMAND; 
-	txdata[1] = LCD_DISPLAYCONTROL | LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF;
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(LCD_DELAY);
+	lcd_sendbyte(true, LCD_DISPLAYCONTROL | LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF);
 	
 	/* Display clear once more */
-	txdata[0] = LCD_COMMAND; 
-	txdata[1] = LCD_CLEARDISPLAY;
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(1530);
+	lcd_sendbyte(true, LCD_CLEARDISPLAY);
+	sleep_ms(2);
 }
 
 void lcd_clear(void)
 {
-	uint8_t txdata[3];
-
-	txdata[0] = LCD_COMMAND; 
-	txdata[1] = LCD_CLEARDISPLAY;
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(1530);
+	lcd_sendbyte(true, LCD_CLEARDISPLAY);
+	sleep_ms(2);
 }
 
 void lcd_curxy(uint8_t x, uint8_t y, bool on)
 {
 	uint8_t txdata[3];
 
-	x &= 0x0f;
+	x &= 0x0f;											// Clip range
 	y &= 0x01;
-	txdata[0] = LCD_COMMAND; 
-	txdata[1] = x | 0x80 | (y==1?0x40:0x00);
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(LCD_DELAY);
-	
-	txdata[0] = LCD_COMMAND; 
-	txdata[1] = LCD_DISPLAYCONTROL | LCD_DISPLAYON | (on?LCD_CURSORON:LCD_CURSOROFF) | LCD_BLINKOFF;
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(LCD_DELAY);
+	lcd_sendbyte(true, (x | 0x80 | (y==1?0x40:0x00)));
+	lcd_sendbyte(true, LCD_DISPLAYCONTROL | LCD_DISPLAYON | (on?LCD_CURSORON:LCD_CURSOROFF) | LCD_BLINKOFF);
 }
 
 void lcd_putxy(uint8_t x, uint8_t y, uint8_t c)
 {
-	uint8_t txdata[3];
-
-	x &= 0x0f;
+	x &= 0x0f;											// Clip range
 	y &= 0x01;
-	txdata[0] = LCD_COMMAND; 
-	txdata[1] = x | 0x80 | (y==1?0x40:0x00);
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(LCD_DELAY);
-
-	txdata[0] = LCD_DATA; 
-	txdata[1] = c;
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(LCD_DELAY);
+	lcd_sendbyte(true, (x | 0x80 | (y==1?0x40:0x00)));
+	lcd_sendbyte(false, c);
 }
 
 void lcd_writexy(uint8_t x, uint8_t y, uint8_t *s)
 {
 	uint8_t i, len;
-	uint8_t txdata[18];
 
-	x &= 0x0f;
+	x &= 0x0f;											// Clip range
 	y &= 0x01;
-	txdata[0] = LCD_COMMAND; 
-	txdata[1] = x | 0x80 | ((y==1)?0x40:0x00);
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(LCD_DELAY);
+	lcd_sendbyte(true, (x | 0x80 | (y==1?0x40:0x00)));
 
 	len = strlen(s);
-	len = (len>(16-x))?(16-x):len;
-	txdata[0] = LCD_DATA; 
-	for(i=0; i<len; i++) txdata[i+1]=s[i];
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, len+1, false);
-	sleep_us(LCD_DELAY);
+	len = (len>(16-x))?(16-x):len;						// Clip range
+	for(i=0; i<len; i++)
+		lcd_sendbyte(false, s[i]);
 }
 
 
@@ -239,7 +235,8 @@ void lcd_test(void)
 	lcd_clear();
 	for (i=0; i<16; i++)
 	{
-		for(j=0; j<16; j++) chr[j] = (uint8_t)(16*i+j);
+		for(j=0; j<16; j++) 
+			chr[j] = (uint8_t)(16*i+j);
 		lcd_writexy(0, 0, chr);
 		sleep_ms(800);
 		lcd_writexy(0, 1, chr);
