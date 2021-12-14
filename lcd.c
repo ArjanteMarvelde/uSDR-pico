@@ -33,8 +33,8 @@
 #define LCD_TYPE			LCD_8574
 
 /* I2C address */
-#define I2C_LCD 			0x3E
-//#define I2C_LCD			0x27
+//#define I2C_LCD 			0x3E
+#define I2C_LCD			0x27
 
 /* HD44780 interface */
 // commands
@@ -106,10 +106,10 @@ uint8_t cgram[8][8] =
  */
 void lcd_sendbyte(uint8_t command, uint8_t data)
 {
-	uint8_t txdata[2];
 
 #if LCD_TYPE == LCD_1804
 
+	uint8_t txdata[2];
 	// Write command/data flag and data byte
 	txdata[0] = (command?LCD_COMMAND:LCD_DATA); 
 	txdata[1] = data;
@@ -118,26 +118,19 @@ void lcd_sendbyte(uint8_t command, uint8_t data)
 		
 #elif LCD_TYPE == LCD_8574
 
+	uint8_t high, low;
+	high = (command?0:LCD2_DATA)|LCD2_ENABLE|((data&0xf0)>>1)|LCD2_BACKLIGHT;
+	low  = (command?0:LCD2_DATA)|LCD2_ENABLE|((data&0x0f)<<3)|LCD2_BACKLIGHT;
+	
 	// Write high nibble
-	txdata[0] = (command?0:LCD2_DATA)|LCD2_ENABLE|((data&0xf0)<<1)|LCD2_BACKLIGHT;
-	i2c_write_blocking(i2c1, I2C_LCD, &txdata[0], 1, false);
-	sleep_us(LCD_DELAY);
-	txdata[0] &= ~LCD2_ENABLE;
-	i2c_write_blocking(i2c1, I2C_LCD, &txdata[0], 1, false);
-	sleep_us(LCD_DELAY);
-	txdata[0] |= LCD2_ENABLE;
-	i2c_write_blocking(i2c1, I2C_LCD, &txdata[0], 1, false);
-	sleep_us(LCD_DELAY);
+	i2c_write_blocking(i2c1, I2C_LCD, &high, 1, false);	sleep_us(LCD_DELAY);
+	high &= ~LCD2_ENABLE;
+	i2c_write_blocking(i2c1, I2C_LCD, &high, 1, false);	sleep_us(LCD_DELAY);
+	
 	// Write low nibble
-	txdata[0] = (command?0:LCD2_DATA)|LCD2_ENABLE|((data&0xf0)>>3)|LCD2_BACKLIGHT;
-	i2c_write_blocking(i2c1, I2C_LCD, &txdata[0], 1, false);
-	sleep_us(LCD_DELAY);
-	txdata[0] &= ~LCD2_ENABLE;
-	i2c_write_blocking(i2c1, I2C_LCD, &txdata[0], 1, false);
-	sleep_us(LCD_DELAY);
-	txdata[0] |= LCD2_ENABLE;
-	i2c_write_blocking(i2c1, I2C_LCD, &txdata[0], 1, false);
-	sleep_us(LCD_DELAY);
+	i2c_write_blocking(i2c1, I2C_LCD, &low, 1, false); sleep_us(LCD_DELAY);
+	low &= ~LCD2_ENABLE;
+	i2c_write_blocking(i2c1, I2C_LCD, &low, 1, false); sleep_us(LCD_DELAY);
 
 #endif
 }
