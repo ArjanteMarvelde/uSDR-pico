@@ -44,14 +44,14 @@
 
 /** User selectable definitions **/
 // Set I2C address
-#define I2C_LCD				0x27
-//#define I2C_LCD			0x3E
+//#define I2C_LCD				0x27
+#define I2C_LCD			0x3E
 
 // Select LCD type matching your HW
 #define LCD_1804			0						// Seeed / Grove
 #define LCD_8574_ADA		1						// Adafruit I2C backpack
 #define LCD_8574_GEN		2						// Generic I2C backpack
-#define LCD_TYPE			LCD_8574_GEN
+#define LCD_TYPE			LCD_1804
 
 
 /** HD44780 interface **/
@@ -159,7 +159,7 @@ void lcd_sendbyte(uint8_t command, uint8_t data)
 #if LCD_TYPE == LCD_8574_ADA
 	uint8_t high, low;
 	high = (command?LCD_COMMAND_BIT:LCD_DATA_BIT)|LCD_ENABLE_BIT|((data>>1)&0x78))|LCD_BACKLIGHT_ADA;
-	low  = (command?LCD_COMMAND_BIT:LCD_DATA_BIT)|LCD_ENABLE_BIT|((data<<3)&0x78)<<3)|LCD_BACKLIGHT_ADA;
+	low  = (command?LCD_COMMAND_BIT:LCD_DATA_BIT)|LCD_ENABLE_BIT|((data<<3)&0x78))|LCD_BACKLIGHT_ADA;
 
 	// Write high nibble
 	i2c_write_blocking(i2c1, I2C_LCD, &high, 1, false);	sleep_us(LCD_DELAY);
