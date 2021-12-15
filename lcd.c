@@ -44,14 +44,14 @@
 
 /** User selectable definitions **/
 // Set I2C address
-#define I2C_LCD				0x27
-//#define I2C_LCD			0x3E
+//#define I2C_LCD				0x27
+#define I2C_LCD				0x3E
 
 // Select LCD type matching your HW
 #define LCD_1804			0						// Seeed / Grove
 #define LCD_8574_ADA		1						// Adafruit I2C backpack
 #define LCD_8574_GEN		2						// Generic I2C backpack
-#define LCD_TYPE			LCD_8574_GEN
+#define LCD_TYPE			LCD_1804
 
 
 /** HD44780 interface **/
@@ -99,6 +99,7 @@
 #define LCD_DATA			0x40
 #define LCD_INIT_1804		(LCD_FUNCTIONSET | LCD_8BITMODE | LCD_2LINE | LCD_5x8DOTS)
 
+
 // 8574-based specific bitmasks
 #define LCD_COMMAND_ADA		0x00
 #define LCD_DATA_ADA		0x02
@@ -113,10 +114,13 @@
 #define LCD_INIT_GEN		(LCD_FUNCTIONSET | LCD_4BITMODE | LCD_2LINE | LCD_5x8DOTS)
 
 #if (LCD_TYPE == LCD_1804)
+#define LCD_START			LCD_INIT_1804
 #define LCD_INIT_FUNCTION 	LCD_INIT_1804
 #elif (LCD_TYPE == LCD_8574_ADA)
+#define LCD_START			0x30
 #define LCD_INIT_FUNCTION 	LCD_INIT_ADA
 #elif (LCD_TYPE == LCD_8574_GEN)
+#define LCD_START			0x30
 #define LCD_INIT_FUNCTION 	LCD_INIT_GEN
 #endif
 
@@ -205,21 +209,29 @@ void lcd_init(void)
 	uint8_t i;
 	
 	/* HD44780 start sequence */
-	sleep_ms(200);
-	i = 0x30;
+	sleep_ms(500);
+	i = LCD_START;
 	lcd_sendbyte(true, i);
-	sleep_us(4100);
+	sleep_us(4500);
 	lcd_sendbyte(true, i);
+	sleep_us(100);
 	lcd_sendbyte(true, i);
 
 	/* Initialize function set */
 	lcd_sendbyte(true, LCD_INIT_FUNCTION);
 
 	/* Initialize display control */
-	lcd_sendbyte(true, LCD_DISPLAYCONTROL | LCD_DISPLAYOFF | LCD_CURSOROFF | LCD_BLINKOFF);
+	lcd_sendbyte(true, LCD_DISPLAYCONTROL | LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF);
 
 	/* Initialize entry mode set */ 
 	lcd_sendbyte(true, LCD_ENTRYMODESET | LCD_ENTRYINC | LCD_ENTRYNOSHIFT);
+	
+	/* Initialize display */
+//	lcd_sendbyte(true, LCD_DISPLAYCONTROL | LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF);
+	lcd_sendbyte(true, LCD_CLEARDISPLAY);
+	sleep_ms(2);
+	lcd_sendbyte(true, LCD_RETURNHOME);
+	sleep_ms(2);
 	
 	/* Load CGRAM */
 	for (i=0; i<8; i++)
@@ -229,12 +241,6 @@ void lcd_init(void)
 			lcd_sendbyte(false, cgram[i][j]);				// One byte at a time
 	}
 	
-	/* Initialize display control */
-	lcd_sendbyte(true, LCD_DISPLAYCONTROL | LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF);
-	lcd_sendbyte(true, LCD_CLEARDISPLAY);
-	sleep_ms(2);
-	lcd_sendbyte(true, LCD_RETURNHOME);
-	sleep_ms(2);
 }
 
 void lcd_clear(void)
