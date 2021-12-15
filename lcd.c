@@ -25,8 +25,8 @@
  * LCD_8574_GEN:
  * Standard 16x2 LCD HD44780, with PCF8574 based Generic backpack I2C bridge (@ 0x27)
  * Same registers, but interface uses 4-bit transfers for data/comand, in bits 4..7
- * bit 0 is unused
- * bit 1 is Register Select (0 for command, 1 for data)
+ * bit 0 is Register Select (0 for command, 1 for data)
+ * bit 1 is unused
  * bit 2 is Enable, data/command is transferred on falling edge
  * bit 3 is backlight (1 for on)
  * bit 4..7 data or command nibble (write high nibble first)
@@ -44,14 +44,14 @@
 
 /** User selectable definitions **/
 // Set I2C address
-//#define I2C_LCD				0x27
-#define I2C_LCD			0x3E
+#define I2C_LCD				0x27
+//#define I2C_LCD			0x3E
 
 // Select LCD type matching your HW
 #define LCD_1804			0						// Seeed / Grove
 #define LCD_8574_ADA		1						// Adafruit I2C backpack
 #define LCD_8574_GEN		2						// Generic I2C backpack
-#define LCD_TYPE			LCD_1804
+#define LCD_TYPE			LCD_8574_GEN
 
 
 /** HD44780 interface **/
@@ -100,20 +100,24 @@
 #define LCD_INIT_1804		(LCD_FUNCTIONSET | LCD_8BITMODE | LCD_2LINE | LCD_5x8DOTS)
 
 // 8574-based specific bitmasks
-#define LCD_COMMAND_BIT		0x00
-#define LCD_DATA_BIT		0x02
-#define LCD_ENABLE_BIT		0x04
+#define LCD_COMMAND_ADA		0x00
+#define LCD_DATA_ADA		0x02
 #define LCD_BACKLIGHT_ADA	0x80
-#define LCD_BACKLIGHT_GEN	0x08
+#define LCD_ENABLE_ADA		0x04
 #define LCD_INIT_ADA		(LCD_FUNCTIONSET | LCD_4BITMODE | LCD_2LINE | LCD_5x8DOTS)
+
+#define LCD_COMMAND_GEN		0x00
+#define LCD_DATA_GEN		0x01
+#define LCD_ENABLE_GEN		0x04
+#define LCD_BACKLIGHT_GEN	0x08
 #define LCD_INIT_GEN		(LCD_FUNCTIONSET | LCD_4BITMODE | LCD_2LINE | LCD_5x8DOTS)
 
 #if (LCD_TYPE == LCD_1804)
-#define LCD_INIT_FUNCTION LCD_INIT_1804
+#define LCD_INIT_FUNCTION 	LCD_INIT_1804
 #elif (LCD_TYPE == LCD_8574_ADA)
-#define LCD_INIT_FUNCTION LCD_INIT_ADA
+#define LCD_INIT_FUNCTION 	LCD_INIT_ADA
 #elif (LCD_TYPE == LCD_8574_GEN)
-#define LCD_INIT_FUNCTION LCD_INIT_GEN
+#define LCD_INIT_FUNCTION 	LCD_INIT_GEN
 #endif
 
 
@@ -158,56 +162,61 @@ void lcd_sendbyte(uint8_t command, uint8_t data)
 		
 #if LCD_TYPE == LCD_8574_ADA
 	uint8_t high, low;
-	high = (command?LCD_COMMAND_BIT:LCD_DATA_BIT)|LCD_ENABLE_BIT|((data>>1)&0x78))|LCD_BACKLIGHT_ADA;
-	low  = (command?LCD_COMMAND_BIT:LCD_DATA_BIT)|LCD_ENABLE_BIT|((data<<3)&0x78))|LCD_BACKLIGHT_ADA;
+	high = (command?LCD_COMMAND_ADA:LCD_DATA_ADA)|((data>>1)&0x78)|LCD_BACKLIGHT_ADA;
+	low  = (command?LCD_COMMAND_ADA:LCD_DATA_ADA)|((data<<3)&0x78)|LCD_BACKLIGHT_ADA;
 
 	// Write high nibble
+	high |= LCD_ENABLE_ADA;
 	i2c_write_blocking(i2c1, I2C_LCD, &high, 1, false);	sleep_us(LCD_DELAY);
-	high &= ~LCD_ENABLE_BIT;
+	high &= ~LCD_ENABLE_ADA;
 	i2c_write_blocking(i2c1, I2C_LCD, &high, 1, false);	sleep_us(LCD_DELAY);
 	
 	// Write low nibble
+	low |= LCD_ENABLE_ADA;
 	i2c_write_blocking(i2c1, I2C_LCD, &low, 1, false); sleep_us(LCD_DELAY);
-	low &= ~LCD_ENABLE_BIT;
+	low &= ~LCD_ENABLE_ADA;
 	i2c_write_blocking(i2c1, I2C_LCD, &low, 1, false); sleep_us(LCD_DELAY);
 #endif
 
 #if LCD_TYPE == LCD_8574_GEN
 	uint8_t high, low;
-	high = (command?LCD_COMMAND_BIT:LCD_DATA_BIT)|LCD_ENABLE_BIT|((data   )&0xf0)|LCD_BACKLIGHT_GEN;
-	low  = (command?LCD_COMMAND_BIT:LCD_DATA_BIT)|LCD_ENABLE_BIT|((data<<4)&0xf0)|LCD_BACKLIGHT_GEN;
+	high = (command?LCD_COMMAND_GEN:LCD_DATA_GEN)|((data   )&0xf0)|LCD_BACKLIGHT_GEN;
+	low  = (command?LCD_COMMAND_GEN:LCD_DATA_GEN)|((data<<4)&0xf0)|LCD_BACKLIGHT_GEN;
 
 	// Write high nibble
+	high |= LCD_ENABLE_GEN;
 	i2c_write_blocking(i2c1, I2C_LCD, &high, 1, false);	sleep_us(LCD_DELAY);
-	high &= ~LCD_ENABLE_BIT;
+	high &= ~LCD_ENABLE_GEN;
 	i2c_write_blocking(i2c1, I2C_LCD, &high, 1, false);	sleep_us(LCD_DELAY);
 	
 	// Write low nibble
+	low |= LCD_ENABLE_GEN;
 	i2c_write_blocking(i2c1, I2C_LCD, &low, 1, false); sleep_us(LCD_DELAY);
-	low &= ~LCD_ENABLE_BIT;
+	low &= ~LCD_ENABLE_GEN;
 	i2c_write_blocking(i2c1, I2C_LCD, &low, 1, false); sleep_us(LCD_DELAY);
 #endif
 }
 
+/*
+ * It seems that there is too much in here, but it doesn't harm either.
+ */
 void lcd_init(void)
 { 
 	uint8_t i;
 	
-	sleep_ms(100);
+	/* HD44780 start sequence */
+	sleep_ms(200);
+	i = 0x30;
+	lcd_sendbyte(true, i);
+	sleep_us(4100);
+	lcd_sendbyte(true, i);
+	lcd_sendbyte(true, i);
 
 	/* Initialize function set */
-	lcd_sendbyte(true, LCD_INIT_FUNCTION);
-	sleep_us(4500);
-	lcd_sendbyte(true, LCD_INIT_FUNCTION);
-	lcd_sendbyte(true, LCD_INIT_FUNCTION);
 	lcd_sendbyte(true, LCD_INIT_FUNCTION);
 
 	/* Initialize display control */
 	lcd_sendbyte(true, LCD_DISPLAYCONTROL | LCD_DISPLAYOFF | LCD_CURSOROFF | LCD_BLINKOFF);
-	
-	/* Display clear */
-	lcd_sendbyte(true, LCD_CLEARDISPLAY);
-	sleep_ms(2);
 
 	/* Initialize entry mode set */ 
 	lcd_sendbyte(true, LCD_ENTRYMODESET | LCD_ENTRYINC | LCD_ENTRYNOSHIFT);
@@ -222,9 +231,9 @@ void lcd_init(void)
 	
 	/* Initialize display control */
 	lcd_sendbyte(true, LCD_DISPLAYCONTROL | LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF);
-	
-	/* Display clear once more */
 	lcd_sendbyte(true, LCD_CLEARDISPLAY);
+	sleep_ms(2);
+	lcd_sendbyte(true, LCD_RETURNHOME);
 	sleep_ms(2);
 }
 

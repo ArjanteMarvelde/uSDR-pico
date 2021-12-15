@@ -84,7 +84,7 @@ int main()
 	gpio_pull_up(I2C0_SCL);
 	
 	/* i2c1 initialisation at 400Khz. */
-	i2c_init(i2c1, 400*1000);
+	i2c_init(i2c1, 100*1000);
 	gpio_set_function(I2C1_SDA, GPIO_FUNC_I2C);
 	gpio_set_function(I2C1_SCL, GPIO_FUNC_I2C);
 	gpio_pull_up(I2C1_SDA);
