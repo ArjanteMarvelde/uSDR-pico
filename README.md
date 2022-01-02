@@ -66,4 +66,4 @@ I also used the online FIR filter calculator T-Filter (http://t-filter.engineerj
 **The code and electronic designs as well as the implementations presented in this repository can be copied and modified freely, for non-commercial use.
 Use for commercial purposes is allowed as well, as long as a reference to this repository is included in the product.**
 
-
+See also my [Wave Form Generator](https://github.com/ArjanteMarvelde/uWFG-Pico) project. 
