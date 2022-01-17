@@ -48,6 +48,7 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 ## Installing and using the SDK for Windows: 
 Please refer to https://github.com/ndabas/pico-setup-windows/releases where the latest installer can be downloaded (e.g. **pico-setup-windows-0.3-x64.exe**).  
 Execute the installer to set up the SDK environment, e.g. in **~/Documents/Pico**  (let's call this folder **$PICO**). 
+You can upgrade the sdk to the latest version by downloading and replacing the **$PICO/pico-sdk** folder. The latest version is on Github: https://github.com/raspberrypi/pico-sdk  
 
 ## Building uSDR-pico: 
 Clone/copy the uSDR-pico code files into a subdirectory, e.g. **$PICO/uSDR-pico**  
