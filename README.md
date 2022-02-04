@@ -1,10 +1,11 @@
 # uSDR-pico
-This Git repository contains a Micro-SDR implementation, based on a RP2040 Pi Pico. The project is highly experimental, foremost intended to investigate how the Pico HW and SDK work with an application like this. It contains the code for an experimental implementation of the control and signal processing for a QSD/QSE based transceiver. 
+This Git repository contains a Micro-SDR implementation, based on a RP2040 Pi Pico. The project is highly experimental, foremost intended to investigate how the Pico HW and SDK work with an application like this. Also it is a platform to experiment with digital signal processing techniques. The repo contains the code for an experimental implementation of the control and signal processing for a QSD/QSE based transceiver. 
 Furthermore, the repository contains the electronic design of some modules that cover the mixing, filtering and RF amplification.  
 
-Please see the doc folder for a full description.
+The ZIP files contain a consistent package, but the latest code is in the files in the main directory.  
+Please refer to the doc folder for a full description.
 
-The platform used is a Pi Pico module with an RP2040 processor. This processor has dual cores, running at 125MHz each and very configurable I/O, which eases the HW design.
+The platform used is a Pi Pico module with an RP2040 processor. This processor has dual cores, running default at 125MHz each, and a very configurable I/O which eases the HW design.
 The software is distributed over the two cores: *core0* takes care of all user I/O and control functions, while *core1* performs all of the signal processing. The *core1* functionality consists of a TX-branch and an RX-branch, each called from a function that waits for inter-core FIFO words popping out. This happens every 16usec, because on *core0* a 16usec timer callback ISR pushes the RX/TX status into that FIFO. Hence the signal processing rythm on *core1* effectively is 62.5kHz.  
 On *core1* the three ADC channels are continuously sampled at maximum speed in round-robin mode. Samples are therefore taken every 6usec for each channel, maximum jitter between I and Q channels is 4usec, which has a negligible effect in the audio domain.  
 
@@ -41,11 +42,13 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 - [x] design a set of PCBs
 - [x] sort out the new HW modules
 - [ ] improve speed: better dual-core management for memory and timer 
+- [ ] improve speed: overclock processor 2x or so
 - [x] add control for new HW: BPF and pre-amp/attenuator switching
 
 ## Installing and using the SDK for Windows: 
 Please refer to https://github.com/ndabas/pico-setup-windows/releases where the latest installer can be downloaded (e.g. **pico-setup-windows-0.3-x64.exe**).  
-Execute the installer to set up the SDK environment, e.g. in **~/Documents/Pico**  (let's call this folder **$PICO**). 
+Execute the installer to set up the SDK environment, e.g. in **~/Documents/Pico**  (let's call this folder **$PICO**).  
+You can upgrade the SDK to the latest version by replacing the complete **$PICO/pico-sdk** folder with the newer version. The latest version is on Github: https://github.com/raspberrypi/pico-sdk (download code as zip, extract the **pico-sdk-master** folder from it, rename it to **pico-sdk** and use it to replace the original)  
 
 ## Building uSDR-pico: 
 Clone/copy the uSDR-pico code files into a subdirectory, e.g. **$PICO/uSDR-pico**  
@@ -66,4 +69,4 @@ I also used the online FIR filter calculator T-Filter (http://t-filter.engineerj
 **The code and electronic designs as well as the implementations presented in this repository can be copied and modified freely, for non-commercial use.
 Use for commercial purposes is allowed as well, as long as a reference to this repository is included in the product.**
 
-
+See also my [Wave Form Generator](https://github.com/ArjanteMarvelde/uWFG-Pico) project. 

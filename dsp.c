@@ -543,7 +543,7 @@ void dsp_loop()
 	{
         cmd = multicore_fifo_pop_blocking();		// Wait for fifo output
 
-		tx_enabled = ptt_active || vox();			// Sample audio and check level	
+		tx_enabled = vox() || ptt_active;			// Sample audio and check level	
 		if (tx_enabled)
 		{
 			if (vox_level != VOX_OFF) 				// Only when vox is enabled
