@@ -51,14 +51,18 @@ Execute the installer to set up the SDK environment, e.g. in **~/Documents/Pico*
 You can upgrade the SDK to the latest version by replacing the complete **$PICO/pico-sdk** folder with the newer version. The latest version is on Github: https://github.com/raspberrypi/pico-sdk (download code as zip, extract the **pico-sdk-master** folder from it, rename it to **pico-sdk** and use it to replace the original)  
 
 ## Building uSDR-pico: 
-Clone/copy the uSDR-pico code files into a subdirectory, e.g. **$PICO/uSDR-pico**  
+Clone/copy the uSDR-pico code files into a subdirectory: **$PICO/uSDR-pico**  
 Create the build folder: **$PICO/uSDR-pico/build**  
 
-Before doing any building you need to adapt the file **$PICO/uSDR-pico/CMakeLists.txt**, using your favourite editor, to reflect your own directory structure. Also, select whether you want **stdio** to use the UART on pins 1 and 2 or the USB serial port. The monitor terminal is on **stdio**.  
-In **$PICO/** you will find a command to start a Developer Command Prompt (*DCP*, like a "DOS box"), make sure to use this one instead of any other DOS box. Within this *DCP* all environment settings have been properly pre-set to enable building.  
-In the *DCP* window, chdir to the **build** folder and execute: **cmake -G "NMake Makefiles" ..**   (do not forget the trailing dots).
+Before the first build you need to check and adapt the file **$PICO/uSDR-pico/CMakeLists.txt**, using your favourite editor, to make sure it reflects your own directory structure. Also in this file, select whether you want **stdio** to use the UART on pins 1 and 2 or the USB serial port. The monitor terminal is on **stdio**. This is needed because CMakeLists.txt directs CMake in the creation of your make environment. In fact, every time you change something in CMakeLists.txt (like adding another source file to the build) you will have to delete the build folder and re-issue CMake.   
+In **$PICO/** you will find a command to start a **Developer Command Prompt for Pico** (*DCP*, like a "DOS box"), make sure to use this one instead of any other DOS box. Within this *DCP* all environment settings have been properly set to enable the building process.  
+In the *DCP* window, chdir to the **build** folder and execute: **cmake -G "NMake Makefiles" ..**   (do not forget the trailing dots, it points to the folder containing CMakeLists.txt).  
 Now you have initialized the make environment (for *nmake*) and by executing **nmake** in that same **build** folder, all SDK libraries and finally the Pi Pico loadable file **uSDR.uf2** will be created.  
 Rebooting the Pico while the bootsel button is pressed will open a file explorer window with the Pico shown as a Mass Storage Device (e.g. drive E:). Moving the binary to the Pico is as easy as dragging and dropping this uf2 file into that MSD.  
+
+## Releases:  
+Stable packages are archived in zip files. The source files in the root folder are newest and could be used to replace files from the zip archive. There are pre-built UF2 files for three display types, which could be tried. However, there are too many differnt types and addresses, so it is better to build a fresh one for your own implementation.   
+The PCB files have been made with Eagle 5.11, and can be modified or otherwise re-used when needed. The CAM files for each board are packaged in separate zips, these can be used as-is to order PCBs.  
 
 # Background
 The folder **$PICO/docs** also contains some manuals, of which the *C-SDK description*, the *RP2040 datasheet* and the *Pico Pinout* are absolute must-reads when you start writing software.  
