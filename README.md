@@ -3,28 +3,13 @@ This Git repository contains a Micro-SDR implementation, based on a RP2040 Pi Pi
 Furthermore, the repository contains the electronic design of some modules that cover the mixing, filtering and RF amplification.  
 
 The ZIP files contain a consistent package, but the latest code is in the files in the main directory.  
-Please refer to the doc folder for a full description.
+The V3.00 package contains two signal processing engines, selectable with a compile switch in dsp.h. The first engine is the old time domain processor, more or less as in V2, and the second engine is a new FFT based processor.  
+For a more detailed description of the software and the hardware, please refer to the elaborate documentation.  
 
-The platform used is a Pi Pico module with an RP2040 processor. This processor has dual cores, running default at 125MHz each, and a very configurable I/O which eases the HW design.
-The software is distributed over the two cores: *core0* takes care of all user I/O and control functions, while *core1* performs all of the signal processing. The *core1* functionality consists of a TX-branch and an RX-branch, each called from a function that waits for inter-core FIFO words popping out. This happens every 16usec, because on *core0* a 16usec timer callback ISR pushes the RX/TX status into that FIFO. Hence the signal processing rythm on *core1* effectively is 62.5kHz.  
-On *core1* the three ADC channels are continuously sampled at maximum speed in round-robin mode. Samples are therefore taken every 6usec for each channel, maximum jitter between I and Q channels is 4usec, which has a negligible effect in the audio domain.  
-
-The TX-branch 
-- takes latest audio audio sample input from ADC2 (rate = 62.5 kHz), 
-- applies a low-pass filter at Fc=3kHz, 
-- reduces sampling by 4 to get better low frequency response Hilbert xform (rate = 15.625 kHz), 
-- splits into an I-channel 7 sample delay line and a Q-channel 15-tap Discrete Hilbert Transform
-- scales, filters and outputs I and Q samples on PWM based DACs, towards QSE output
- 
-The RX-branch
-- takes latest Q and I samples from QSD on ADC0 and ADC1 (rate = 62.5 kHz)
-- applies a low-pass filter at Fc=3kHz, 
-- reduces sampling by 4 to get better low frequency response Hilbert xform (rate = 15.625 kHz), 
-- demodulates, e.g. SSB:
--- applies 15-tap DHT on Q channel and 7 sample delay on I channel
--- subtracts I and Q samples
-- scales, filters and outputs audio on an PWM based DAC, towards audio output
-
+The platform used is a Pi Pico module with an RP2040 processor. This processor has dual cores, running default at 125MHz each, and a very configurable I/O which eases the HW design. The platform can be overclocked, but some functions seem to become unstable when pushed too far.
+The software is distributed over the two cores: *core0* takes care of all user I/O and control functions, while *core1* performs all of the signal processing. The *core1* functionality consists of a TX-branch and an RX-branch, each called from a function that is synchronized by a timer every 64usec. Hence the signal processing rythm on *core1* effectively is 15.625kHz.  
+On *core1* the three ADC channels are continuously sampled at maximum speed in round-robin mode. Samples are therefore taken every 6usec for each channel, maximum jitter between I and Q channels is 2usec, which has a negligible effect in the audio domain.  
+For the time domain processing the TX and RX functions are called every timeslot, but for the frequency domain processing the samples are collected until half an FFT buffer is filled (512 samples), and hence this happens every 32msec.  
 On *core0* the main loop takes care of user I/O, all other controls and the monitor port. There is also a LED flashing timer callback functioning as a heartbeat.
 
 The Pico controls an Si5351A clock module to obtain the switching clock for the QSE and QSD. The module outputs two synchronous square wave clocks on ch 0 and 1, whith selectable phase difference (0, 90, 180 or 270 degrees). The clock on ch2 is free to be used for other goals. The module is controlled over the **i2c0** channel.
@@ -41,9 +26,9 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 - [ ] implement RSSI
 - [x] design a set of PCBs
 - [x] sort out the new HW modules
-- [ ] improve speed: better dual-core management for memory and timer 
-- [ ] improve speed: overclock processor 2x or so
+- [x] improve speed: better dual-core management for memory and timer 
 - [x] add control for new HW: BPF and pre-amp/attenuator switching
+- [x] add frequency domain processing
 
 ## Installing and using the SDK for Windows: 
 Please refer to https://github.com/ndabas/pico-setup-windows/releases where the latest installer can be downloaded (e.g. **pico-setup-windows-0.3-x64.exe**).  
