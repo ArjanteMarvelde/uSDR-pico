@@ -7,13 +7,20 @@
  * --> Set I2C address below!
  * --> Select LCD_TYPE below!
  * 
+ * Driver for 16x2 HD44780 based LCD displays.
+ * There exist many different types, so you may need to adapt some of the code.
+ * Most notably the startup sequence and the way bytes are sent over the I2C interface. 
+ * But also the register mappings as described below.
+ *
  * LCD_1804:
+ * ---------
  * Grove 16x2 LCD HD44780, with integrated JHD1804 I2C bridge (@ 0x3E)
  * 2 byte interface, 
  * byte0 contains coomand/data, 
  * byte1 contains 8-bit command or data word
  *
  * LCD_8574_ADA:
+ * -------------
  * Standard 16x2 LCD HD44780, with PCF8574 based Adafruit backpack I2C bridge (@ 0x27)
  * Same registers, but interface uses 4-bit transfers for data/comand, in bits 3..6
  * bit 0 is unused
@@ -23,6 +30,7 @@
  * bit 7 is backlight (1 for on)
  *
  * LCD_8574_GEN:
+ * -------------
  * Standard 16x2 LCD HD44780, with PCF8574 based Generic backpack I2C bridge (@ 0x27)
  * Same registers, but interface uses 4-bit transfers for data/comand, in bits 4..7
  * bit 0 is Register Select (0 for command, 1 for data)
@@ -31,8 +39,6 @@
  * bit 3 is backlight (1 for on)
  * bit 4..7 data or command nibble (write high nibble first)
  * 
- * Note: There may be other bit-mappings, code needs to be adjusted to that...
- *
  */
 #include <stdio.h>
 #include <string.h>
@@ -43,20 +49,20 @@
 #include "lcd.h"
 
 /** User selectable definitions **/
-// Set I2C address
-//#define I2C_LCD				0x27
-#define I2C_LCD				0x3E
+// Set I2C address for your device
+#define I2C_LCD				0x3E											// Grove: 0x3E, 8574 backpack: 0x20..0x27
 
-// Select LCD type matching your HW
-#define LCD_1804			0						// Seeed / Grove
-#define LCD_8574_ADA		1						// Adafruit I2C backpack
-#define LCD_8574_GEN		2						// Generic I2C backpack
+// Select LCD type to match your device, 
+// or define a new one when code changes are needed.
+#define LCD_1804			0												// Seeed / Grove
+#define LCD_8574_ADA		1												// Adafruit I2C backpack
+#define LCD_8574_GEN		2												// Generic I2C backpack
 #define LCD_TYPE			LCD_1804
 
 
-/** HD44780 interface **/
+/** Generic HD44780 interface **/
 // commands
-#define LCD_CLEARDISPLAY 	0x01					// Note: LCD_ENTRYINC is set
+#define LCD_CLEARDISPLAY 	0x01											// Note: LCD_ENTRYINC is set
 #define LCD_RETURNHOME 		0x02
 #define LCD_ENTRYMODESET 	0x04
 #define LCD_DISPLAYCONTROL 	0x08
@@ -68,8 +74,8 @@
 // flags for display entry mode: LCD_ENTRYMODESET
 #define LCD_ENTRYSHIFT		0x01
 #define LCD_ENTRYNOSHIFT	0x00
-#define LCD_ENTRYINC		0x02					// Also applies to CGRAM writes
-#define LCD_ENTRYDEC		0x00					// Also applies to CGRAM writes
+#define LCD_ENTRYINC		0x02											// Also applies to CGRAM writes
+#define LCD_ENTRYDEC		0x00											// Also applies to CGRAM writes
 
 // flags for display on/off control: LCD_DISPLAYCONTROL
 #define LCD_DISPLAYON 		0x04
@@ -125,10 +131,8 @@
 #endif
 
 
-
 /** Other definitions **/
-#define LCD_DELAY			100							// Delay for regular write
-
+#define LCD_DELAY			100												// Delay for regular write
 
 
 /*
@@ -144,8 +148,8 @@ uint8_t cgram[8][8] =
 	{0x00, 0x00, 0x00, 0x1f, 0x1f, 0x1f, 0x00, 0x00},	// 0x03: Level 3
 	{0x00, 0x00, 0x1f, 0x1f, 0x1f, 0x1f, 0x00, 0x00},	// 0x04: Level 4
 	{0x00, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x00, 0x00},	// 0x05: Level 5
-	{0x00, 0x04, 0x04, 0x04, 0x1f, 0x0e, 0x04, 0x00},	// 0x06: Receive arrow down
-	{0x04, 0x0e, 0x1f, 0x04, 0x04, 0x04, 0x00, 0x00}	// 0x07: Transmit arrow up
+	{0x00, 0x04, 0x04, 0x04, 0x15, 0x0e, 0x04, 0x00},	// 0x06: Receive arrow down
+	{0x04, 0x0e, 0x15, 0x04, 0x04, 0x04, 0x00, 0x00}	// 0x07: Transmit arrow up
 };
 
 /*
@@ -202,7 +206,7 @@ void lcd_sendbyte(uint8_t command, uint8_t data)
 }
 
 /*
- * It seems that there is too much in here, but it doesn't harm either.
+ * It seems that there is too much init here, but it doesn't harm either.
  */
 void lcd_init(void)
 { 
@@ -236,9 +240,9 @@ void lcd_init(void)
 	/* Load CGRAM */
 	for (i=0; i<8; i++)
 	{
-		lcd_sendbyte(true, LCD_SETCGRAMADDR | (i<<3));		//Set CGRAM address
+		lcd_sendbyte(true, LCD_SETCGRAMADDR | (i<<3));						//Set CGRAM address
 		for (int j=0; j<8; j++)
-			lcd_sendbyte(false, cgram[i][j]);				// One byte at a time
+			lcd_sendbyte(false, cgram[i][j]);								// One byte at a time
 	}
 	
 }
@@ -253,7 +257,7 @@ void lcd_curxy(uint8_t x, uint8_t y, bool on)
 {
 	uint8_t txdata[3];
 
-	x &= 0x0f;											// Clip range
+	x &= 0x0f;																// Clip range
 	y &= 0x01;
 	lcd_sendbyte(true, (x | 0x80 | (y==1?0x40:0x00)));
 	lcd_sendbyte(true, LCD_DISPLAYCONTROL | LCD_DISPLAYON | (on?LCD_CURSORON:LCD_CURSOROFF) | LCD_BLINKOFF);
@@ -261,7 +265,7 @@ void lcd_curxy(uint8_t x, uint8_t y, bool on)
 
 void lcd_putxy(uint8_t x, uint8_t y, uint8_t c)
 {
-	x &= 0x0f;											// Clip range
+	x &= 0x0f;																// Clip range
 	y &= 0x01;
 	lcd_sendbyte(true, (x | 0x80 | (y==1?0x40:0x00)));
 	lcd_sendbyte(false, c);
@@ -271,12 +275,12 @@ void lcd_writexy(uint8_t x, uint8_t y, uint8_t *s)
 {
 	uint8_t i, len;
 
-	x &= 0x0f;											// Clip range
+	x &= 0x0f;																// Clip range
 	y &= 0x01;
 	lcd_sendbyte(true, (x | 0x80 | (y==1?0x40:0x00)));
 
 	len = strlen(s);
-	len = (len>(16-x))?(16-x):len;						// Clip range
+	len = (len>(16-x))?(16-x):len;											// Clip range
 	for(i=0; i<len; i++)
 		lcd_sendbyte(false, s[i]);
 }

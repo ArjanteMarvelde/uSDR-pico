@@ -89,20 +89,6 @@ void mon_lt(void)
 }
 
 
-/* 
- * Checks for inter-core fifo overruns 
- */
-extern volatile uint32_t fifo_overrun, fifo_rx, fifo_tx, fifo_xx, fifo_incnt;
-void mon_fo(void)
-{
-	printf("Fifo input: %lu\n", fifo_incnt);
-	printf("Fifo rx: %lu\n", fifo_rx);
-	printf("Fifo tx: %lu\n", fifo_tx);
-	printf("Fifo unknown: %lu\n", fifo_xx);
-	printf("Fifo overruns: %lu\n", fifo_overrun);
-}
-
-
 /*
  * Toggles the PTT status, overriding the HW signal
  */
@@ -131,12 +117,13 @@ void mon_bp(void)
 	
 	if (*argv[1]=='w')
 	{
-		if (nargs>=2) 
+		if (nargs>2) 
 		{
 			ret = atoi(argv[2]);
-			relay_setband((uint8_t)ret);
+			relay_setband(ret);
 		}
 	}
+	sleep_ms(1);
 	ret = relay_getband();
 	if (ret<0)
 		printf ("I2C read error\n");
@@ -153,12 +140,13 @@ void mon_rx(void)
 	
 	if (*argv[1]=='w')
 	{
-		if (nargs>=2) 
+		if (nargs>2) 
 		{
 			ret = atoi(argv[2]);
-			relay_setattn((uint8_t)ret);
+			relay_setattn(ret);
 		}
 	}
+	sleep_ms(1);
 	ret = relay_getattn();
 	if (ret<0)
 		printf ("I2C read error\n");
@@ -167,18 +155,56 @@ void mon_rx(void)
 	
 }
 
+/* 
+ * Checks for overruns 
+ */
+extern volatile uint32_t dsp_overrun;
+#if DSP_FFT == 1
+extern volatile uint32_t dsp_tickx;
+extern volatile int scale0;
+extern volatile int scale1;
+#endif
+void mon_or(void)
+{
+	printf("DSP overruns   : %d\n", dsp_overrun);
+#if DSP_FFT == 1
+	printf("DSP loop load  : %lu%%\n", (100*dsp_tickx)/512);	
+	printf("FFT scale = %d, iFFT scale = %d\n", scale0, scale1);	
+#endif
+}
+
+
+/* 
+ * ADC and AGC levels 
+ */
+extern volatile uint32_t adc_level[3];	
+extern volatile int32_t  rx_agc;
+extern volatile int adccnt;
+void mon_adc(void)
+{
+	// Print results
+	printf("ADC0: %5u/2048\n", adc_level[0]>>8);
+	printf("ADC1: %5u/2048\n", adc_level[1]>>8);
+	printf("ADC2: %5u/2048\n", adc_level[2]>>8);
+	printf("AGC : %7d\n", rx_agc);
+	printf("ADCc: %5d\n", adccnt);
+}
+
+
+
 /*
  * Command shell table, organize the command functions above
  */
-#define NCMD	6
+#define NCMD	7
 shell_t shell[NCMD]=
 {
-	{"si", 2, &mon_si, "si <start> <nr of reg>", "Dumps Si5351 registers"},
-	{"lt", 2, &mon_lt, "lt (no parameters)", "LCD test, dumps characterset on LCD"},
-	{"fo", 2, &mon_fo, "fo (no parameters)", "Returns inter core fifo overruns"},
-	{"pt", 2, &mon_pt, "pt (no parameters)", "Toggles PTT status"},
-	{"bp", 2, &mon_bp, "bp {r|w} <value>", "Read or Write BPF relays"},
-	{"rx", 2, &mon_rx, "rx {r|w} <value>", "Read or Write RX relays"}
+	{"si",  2, &mon_si,  "si <start> <nr of reg>", "Dumps Si5351 registers"},
+	{"lt",  2, &mon_lt,  "lt (no parameters)", "LCD test, dumps characterset on LCD"},
+	{"or",  2, &mon_or,  "or (no parameters)", "Returns overrun information"},
+	{"pt",  2, &mon_pt,  "pt (no parameters)", "Toggles PTT status"},
+	{"bp",  2, &mon_bp,  "bp {r|w} <value>", "Read or Write BPF relays"},
+	{"rx",  2, &mon_rx,  "rx {r|w} <value>", "Read or Write RX relays"},
+	{"adc", 3, &mon_adc, "adc (no parameters)", "Dump latest ADC readouts"}
 };
 
 
@@ -187,6 +213,9 @@ shell_t shell[NCMD]=
 /*** Commandstring parser and monitor process ***/
 /*** ---------------------------------------- ***/
 
+#define ISALPHANUM(c)	(((c)>' ') && ((c)<127))
+#define ISWHITESP(c)	(((c)!='\0') && ((c)<=' '))
+#define ISEOL(c)        ((c)=='\0')
 /*
  * Command line parser
  */
@@ -197,18 +226,19 @@ void mon_parse(char* s)
 
 	p = s;											// Set to start of string
 	nargs = 0;
-	while (*p!='\0')								// Assume stringlength >0 
+	while (ISWHITESP(*p)) p++;						// Skip leading whitespace
+	while (!ISEOL(*p))								// Check remaining stringlength >0 
 	{
-		while (*p==' ') p++;						// Skip whitespace
-		if (*p=='\0') break;						// String might end in spaces
 		argv[nargs++] = p;							// Store first valid char loc after whitespace
-		while ((*p!=' ')&&(*p!='\0')) p++;			// Skip non-whitespace
+		while (ISALPHANUM(*p)) p++;					// Skip non-whitespace
+		while (ISWHITESP(*p)) p++;					// Skip separating whitespace
 	}
-	if (nargs==0) return;							// No command or parameter
+	if (nargs==0) return;							// Nothing to do
+	
 	for (i=0; i<NCMD; i++)							// Lookup shell command
 		if (strncmp(argv[0], shell[i].cmdstr, shell[i].cmdlen) == 0) break;
 	if (i<NCMD)
-		(*shell[i].cmd)();
+		(*shell[i].cmd)();							// Execute if found
 	else											// Unknown command
 	{
 		for (i=0; i<NCMD; i++)						// Print help if no match

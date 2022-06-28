@@ -30,14 +30,15 @@
 #define I2C_BPF				0x20
 
 
-void relay_setband(uint8_t val)
+void relay_setband(int val)
 {
 	uint8_t data[2];
 	int ret;
 	
-	data[0] = val&0x1f;
+	data[0] = ((uint8_t)val)&0x1f;
 	if (i2c_write_blocking(i2c1, I2C_BPF, data, 1, false) < 0)
 		i2c_write_blocking(i2c1, I2C_BPF, data, 1, false);
+	sleep_ms(1);
 }
 
 int relay_getband(void)
@@ -51,13 +52,14 @@ int relay_getband(void)
 	return(ret);
 }
 
-void relay_setattn(uint8_t val)
+void relay_setattn(int val)
 {
 	uint8_t data[2];
 	
-	data[0] = val&0x07;
+	data[0] = ((uint8_t)val)&0x07;
 	if (i2c_write_blocking(i2c1, I2C_RX, data, 1, false) < 0)
 		i2c_write_blocking(i2c1, I2C_RX, data, 1, false);
+	sleep_ms(1);
 }
 
 int relay_getattn(void)
