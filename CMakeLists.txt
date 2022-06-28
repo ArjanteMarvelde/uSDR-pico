@@ -1,4 +1,8 @@
 # Generated Cmake Pico project file
+#
+# After changing this file, empty the build folder and execute from there:  
+#     cmake -G "NMake Makefiles" ..
+#
 
 cmake_minimum_required(VERSION 3.13)
 
