@@ -36,14 +36,13 @@ For setting up the C/C++ build environment for Windows, you can follow the proce
 ### Manual installation.  
 Doing it manually, first download the latest packages, in my case for Windows 10 on a 64 bit PC:  
  
-[ARM GNU toolchain](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/downloads) , 
-choose the file ending on *arm-non-eabi.exe*  
+[ARM GNU toolchain](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/downloads) (choose the file ending on *arm-non-eabi.exe*)  
 [CMake](https://cmake.org/download/)  
 [VS Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)  
-[Python](https://www.python.org/downloads/windows/) , I wonder, do we actually need this for C/C++ environment?  
+[Python](https://www.python.org/downloads/windows/) (I wonder, do we actually need this for C/C++ environment?)  
 [Git](https://git-scm.com/download/win)  
 
-I use Notepad++ as editor for my source files, since I don't like the VS IDE, so I recommend to install this before anything else.  
+I use [Notepad++](https://notepad-plus-plus.org/downloads/) as editor for my source files, since I don't like the VS IDE, so I recommend to install this before anything else.  
 The installation, step by step, listing the choices I made:  
   
 **-1- ARM GNU toolchain**  
@@ -98,9 +97,9 @@ Start installer
   
   
 **-6- Get Pico SDK and examples from Github**  
-Open a Windows command prompt, then use it to setup the folder structure:  
+Open a Windows command prompt, then use it to setup the folder structure (for example, "C:\Users\name\Documents\Pico"):  
 ```
-mkdir <target folder> (for example, "C:\Users\name\Documents\Pico")  
+mkdir <target folder>   
 chdir <target folder>  
 git clone -b master https://github.com/raspberrypi/pico-sdk.git  
 cd pico-sdk  
@@ -119,18 +118,21 @@ setx PICO_TOOLCHAIN_PATH "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi
 ```
 Note that the actual ARM toolchain folder may be different: check it first!  
 Close this VS Developer Command Prompt window  
-
-
-## Building uSDR-pico: 
-Clone/copy the uSDR-pico code files into a subdirectory: **$PICO/uSDR-pico**  
+  
+  
+## Building uSDR-pico:  
+Let's call our <target folder> **$PICO** from now on.  
+Create the folder **$PICO/uSDR-pico**  
+Clone/copy the uSDR-pico code files into **$PICO/uSDR-pico**  
+Copy the file **$PICO/pico-sdk/pico_sdk_import.cmake** into this folder too, it contains the global cmake instructions  
 Create the build folder: **$PICO/uSDR-pico/build**  
-
-Before the first build you need to check and adapt the file **$PICO/uSDR-pico/CMakeLists.txt**, using your favourite editor, to make sure it reflects your own directory structure. Also in this file, select whether you want **stdio** to use the UART on pins 1 and 2 or the USB serial port. The monitor terminal is on **stdio**. This is needed because CMakeLists.txt directs CMake in the creation of your make environment. In fact, every time you change something in CMakeLists.txt (like adding another source file to the build) you will have to delete the build folder and re-issue CMake.   
-In **$PICO/** you will find a command to start a **Developer Command Prompt for Pico** (*DCP*, like a "DOS box"), make sure to use this one instead of any other DOS box. Within this *DCP* all environment settings have been properly set to enable the building process.  
+  
+Before the first build you need to check and adapt the file **$PICO/uSDR-pico/CMakeLists.txt**, using your favourite editor, to make sure it reflects your own directory structure. Also in this file, select whether you want **stdio** to use the UART on pins 1 and 2 or the USB serial port. The monitor terminal is on **stdio**. This is needed because CMakeLists.txt directs CMake in the construction of your nmake environment. In fact, every time you change something in CMakeLists.txt (like adding another source file to the build) you will have to swipe the build folder and re-issue cmake.   
+All building is using the Visual Studio NMake, so it has to be done from a  **VS Developer Command Prompt for Pico**. This is found in the Start menu under VS 2022, and it is best to copy a shortcut in a more convenient place. Then the startup folder property in the shortcut can be changed to for example **$PICO**. Within this *DCP* all environment settings have been properly set to enable the building process.  
 In the *DCP* window, chdir to the **build** folder and execute: **cmake -G "NMake Makefiles" ..**   (do not forget the trailing dots, it points to the folder containing CMakeLists.txt).  
 Now you have initialized the make environment (for *nmake*) and by executing **nmake** in that same **build** folder, all SDK libraries and finally the Pi Pico loadable file **uSDR.uf2** will be created.  
-Rebooting the Pico while the bootsel button is pressed will open a file explorer window with the Pico shown as a Mass Storage Device (e.g. drive E:). Moving the binary to the Pico is as easy as dragging and dropping this uf2 file into that MSD.  
-
+Rebooting the Pico while the bootsel button is pressed will open a Windows Explorer window with the Pico shown as a Mass Storage Device (e.g. drive E:). Moving **uSDR.uf2** to the Pico is as easy as dragging and dropping this file into that MSD.  
+  
 ## Releases:  
 Stable packages are archived in zip files. The source files in the root folder are newest and could be used to replace files from the zip archive. There are pre-built UF2 files for three display types, which could be tried. However, there are too many differnt types and addresses, so it is better to build a fresh one for your own implementation.   
 The PCB files have been made with Eagle 5.11, and can be modified or otherwise re-used when needed. The CAM files for each board are packaged in separate zips, these can be used as-is to order PCBs.  
