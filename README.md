@@ -33,7 +33,7 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 ## Installing and using the SDK for Windows: 
 For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/ndabas/pico-setup-windows), but that seemed to be broken.  
 
-#Manual installation.  
+### Manual installation.  
 Doing it manually, first download the latest packages, in my case for Windows 10 on a 64 bit PC:  
  
 [ARM GNU toolchain](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/downloads) , 
