@@ -58,21 +58,24 @@ If the installer complains, you can also add the folder location manually to the
   
 **-2- CMake**  
 Start the installer  
-> Next  
-> Accept, Next  
-> Tick the box: "Add CMake to path for all users", Next  
-> Folder as proposed, Next  
-> Install  
+- Next  
+- Accept, Next  
+- Tick the box: "Add CMake to path for all users", Next  
+- Folder as proposed, Next  
+- Install  
+
 
 **-3- VS Build Tools (Installer)**  
 Start the loader/installer  
-  Continue  
-  Select: "Desktop development with C++", Install 	(this takes a while...)  
+- Continue  
+- Select: "Desktop development with C++", Install 	(this takes a while...)  
+
 Close the window when done
   
 **-4- Python**  
 Start the installer  
-  Tick the boxes: "Add Python ... to PATH" and "Install for all...", Install now  
+- Tick the boxes: "Add Python ... to PATH" and "Install for all...", Install now  
+  
   
 **-5- Git**  
 Start installer
