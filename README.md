@@ -57,11 +57,11 @@ If the installer complains, you can also add the folder location manually to the
   
 **-2- CMake**  
 Start the installer  
-  Next  
-  Accept, Next  
-  Tick the box: "Add CMake to path for all users", Next  
-  Folder as proposed, Next  
-  Install  
+> Next  
+> Accept, Next  
+> Tick the box: "Add CMake to path for all users", Next  
+> Folder as proposed, Next  
+> Install  
 
 **-3- VS Build Tools (Installer)**  
 Start the loader/installer  
