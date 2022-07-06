@@ -31,9 +31,83 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 - [x] add frequency domain processing
 
 ## Installing and using the SDK for Windows: 
-Please refer to https://github.com/ndabas/pico-setup-windows/releases where the latest installer can be downloaded (e.g. **pico-setup-windows-0.3-x64.exe**).  
-Execute the installer to set up the SDK environment, e.g. in **~/Documents/Pico**  (let's call this folder **$PICO**).  
-You can upgrade the SDK to the latest version by replacing the complete **$PICO/pico-sdk** folder with the newer version. The latest version is on Github: https://github.com/raspberrypi/pico-sdk (download code as zip, extract the **pico-sdk-master** folder from it, rename it to **pico-sdk** and use it to replace the original)  
+For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/ndabas/pico-setup-windows), but that seemed to be broken.  
+
+#Manual installation.  
+Doing it manually, first download the latest packages, in my case for Windows 10 on a 64 bit PC:  
+ 
+[ARM GNU toolchain](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/downloads) , choose: *arm-non-eabi.exe  [CMake](https://cmake.org/download/)  
+[VS Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)  
+[Python](https://www.python.org/downloads/windows/) , I wonder, do we actually need this for C/C++ environment?  
+[Git](https://git-scm.com/download/win)  
+
+I use Notepad++ as editor for my source files, since I don't like the VS IDE, so I recommend to install this before anything else.  
+The installation, step by step, listing the choices I made:  
+  
+**-1- ARM GNU toolchain**  
+Start the installer  
+  Language: English  
+  Next  
+  I Agree  
+  Folder as proposed, Install  
+  Tick the box: "Add path to environment variable", Finish  
+If the installer complains, you can also add the folder location manually to the system path (something like "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\11.2 2022.02")  
+  
+**-2- CMake**  
+Start the installer  
+  Next  
+  Accept, Next  
+  Tick the box: "Add CMake to path for all users", Next  
+  Folder as proposed, Next  
+  Install  
+
+**-3- VS Build Tools (Installer)**  
+Start the loader/installer  
+  Continue  
+  Select: "Desktop development with C++", Install 	(this takes a while...)  
+Close the window when done
+  
+**-4- Python**  
+Start the installer  
+  Tick the boxes: "Add Python ... to PATH" and "Install for all...", Install now  
+  
+**-5- Git**  
+Start installer
+  Next  
+  Use proposed path, Next  
+  Defaults, Next  
+  Default Start menu folder, Next  
+  Use Notepad++ as default editor, Next  
+  Let Git decide, Next  
+  Git from the commandline and 3rd party software, Next  
+  Use bundled SSH, Next  
+  Use the OpenSSL library, Next  
+  Checkout as-is, commit as-is, Next  
+  Use Windows default console, Next  
+  Default, Next  
+  Git Credential manager, Next  
+  Enable file system caching, Next  
+  Enable experimental support for pseudo consoles, Next  
+  Finish  
+  
+**-6- Get Pico SDK and examples from Github**  
+Open a Windows command prompt, then use it to setup the folder structure:  
+   mkdir <target folder> (for example, "C:\Users\name\Documents\Pico")  
+   chdir <target folder>  
+   git clone -b master https://github.com/raspberrypi/pico-sdk.git  
+   cd pico-sdk  
+   git submodule update --init  
+   cd ..  
+   git clone -b master https://github.com/raspberrypi/pico-examples.git  
+  
+**-7- Setup the build environment**  
+Open a Visual Studio Developer Command Prompt from the Start menu  
+Define some environment variables manually (these were not set right during installation)  
+  setx PICO_SDK_PATH "<target folder>\pico-sdk"  
+  setx PICO_TOOLCHAIN_PATH "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\11.2 2022.02"  
+Note that the actual ARM toolchain folder may be different: check it first!  
+Close this VS Developer Command Prompt window  
+
 
 ## Building uSDR-pico: 
 Clone/copy the uSDR-pico code files into a subdirectory: **$PICO/uSDR-pico**  
