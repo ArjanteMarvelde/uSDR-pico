@@ -78,39 +78,45 @@ Start the installer
   
   
 **-5- Git**  
-Start installer
-  Next  
-  Use proposed path, Next  
-  Defaults, Next  
-  Default Start menu folder, Next  
-  Use Notepad++ as default editor, Next  
-  Let Git decide, Next  
-  Git from the commandline and 3rd party software, Next  
-  Use bundled SSH, Next  
-  Use the OpenSSL library, Next  
-  Checkout as-is, commit as-is, Next  
-  Use Windows default console, Next  
-  Default, Next  
-  Git Credential manager, Next  
-  Enable file system caching, Next  
-  Enable experimental support for pseudo consoles, Next  
-  Finish  
+Start installer  
+- Next  
+- Use proposed path, Next  
+- Defaults, Next  
+- Default Start menu folder, Next  
+- Use Notepad++ as default editor, Next  
+- Let Git decide, Next  
+- Git from the commandline and 3rd party software, Next  
+- Use bundled SSH, Next  
+- Use the OpenSSL library, Next  
+- Checkout as-is, commit as-is, Next  
+- Use Windows default console, Next  
+- Default, Next  
+- Git Credential manager, Next  
+- Enable file system caching, Next  
+- Enable experimental support for pseudo consoles, Next  
+- Finish  
+  
   
 **-6- Get Pico SDK and examples from Github**  
 Open a Windows command prompt, then use it to setup the folder structure:  
-   mkdir <target folder> (for example, "C:\Users\name\Documents\Pico")  
-   chdir <target folder>  
-   git clone -b master https://github.com/raspberrypi/pico-sdk.git  
-   cd pico-sdk  
-   git submodule update --init  
-   cd ..  
-   git clone -b master https://github.com/raspberrypi/pico-examples.git  
+```
+mkdir <target folder> (for example, "C:\Users\name\Documents\Pico")  
+chdir <target folder>  
+git clone -b master https://github.com/raspberrypi/pico-sdk.git  
+cd pico-sdk  
+git submodule update --init  
+cd ..  
+git clone -b master https://github.com/raspberrypi/pico-examples.git  
+```
+
   
 **-7- Setup the build environment**  
 Open a Visual Studio Developer Command Prompt from the Start menu  
 Define some environment variables manually (these were not set right during installation)  
-  setx PICO_SDK_PATH "<target folder>\pico-sdk"  
-  setx PICO_TOOLCHAIN_PATH "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\11.2 2022.02"  
+```
+setx PICO_SDK_PATH "<target folder>\pico-sdk"  
+setx PICO_TOOLCHAIN_PATH "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\11.2 2022.02"  
+```
 Note that the actual ARM toolchain folder may be different: check it first!  
 Close this VS Developer Command Prompt window  
 
