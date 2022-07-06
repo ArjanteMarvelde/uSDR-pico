@@ -52,7 +52,7 @@ Start the installer
 -  Next  
 -  I Agree  
 -  Folder as proposed, Install  
--  Tick the box: "Add path to environment variable", Finish   
+-  Tick the box: "Add path to environment variable", Finish  
 If the installer complains, you can also add the folder location manually to the system path (something like "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\11.2 2022.02")  
   
 **-2- CMake**  
