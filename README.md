@@ -121,7 +121,7 @@ Close this VS Developer Command Prompt window
   
   
 ## Building uSDR-pico:  
-Let's call our /<target folder/> **$PICO** from now on.  
+Let's call our *target folder* **$PICO** from now on.  
 Create the folder **$PICO/uSDR-pico**  
 Clone/copy the uSDR-pico code files into **$PICO/uSDR-pico**  
 Copy the file **$PICO/pico-sdk/pico_sdk_import.cmake** into this folder too, it contains the global cmake instructions  
