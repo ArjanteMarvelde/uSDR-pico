@@ -138,7 +138,7 @@ Stable packages are archived in zip files. The source files in the root folder a
 The PCB files have been made with Eagle 5.11, and can be modified or otherwise re-used when needed. The CAM files for each board are packaged in separate zips, these can be used as-is to order PCBs.  
 
 # Background
-The folder **$PICO/docs** also contains some manuals, of which the *C-SDK description*, the *RP2040 datasheet* and the *Pico Pinout* are absolute must-reads when you start writing software.  
+The folder **$PICO/docs** also contains some manuals, of which the *C-SDK description*, the *RP2040 datasheet* and the *Pico Pinout* are absolute must-reads when you start writing software. Note that this folder is only created by the **ndabas** script, after manual installation you should find these on the Raspberry website.  
 For calculating filters I have used the free software from Iowa Hills (http://www.iowahills.com/8DownloadPage.html)  
 I also used the online FIR filter calculator T-Filter (http://t-filter.engineerjs.com/) 
 
