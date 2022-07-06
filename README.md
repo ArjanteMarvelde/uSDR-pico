@@ -36,7 +36,9 @@ For setting up the C/C++ build environment for Windows, you can follow the proce
 #Manual installation.  
 Doing it manually, first download the latest packages, in my case for Windows 10 on a 64 bit PC:  
  
-[ARM GNU toolchain](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/downloads) , choose: *arm-non-eabi.exe  [CMake](https://cmake.org/download/)  
+[ARM GNU toolchain](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/downloads) , 
+choose the file ending on *arm-non-eabi.exe*  
+[CMake](https://cmake.org/download/)  
 [VS Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)  
 [Python](https://www.python.org/downloads/windows/) , I wonder, do we actually need this for C/C++ environment?  
 [Git](https://git-scm.com/download/win)  
