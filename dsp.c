@@ -19,6 +19,7 @@
 #include "hardware/structs/bus_ctrl.h"
 #include "hardware/pwm.h"
 #include "hardware/adc.h"
+#include "hardware/dma.h"
 #include "hardware/irq.h"
 #include "hardware/timer.h"
 #include "hardware/clocks.h"
@@ -48,6 +49,8 @@ volatile uint32_t dsp_overrun;												// Overrun counter
 
 volatile uint16_t dac_iq, dac_audio;
 
+
+/*** External Interfaces, mostly used by hmi.c ***/
 
 /*
  * MODE is modulation/demodulation 
@@ -127,6 +130,8 @@ void dsp_setvox(int vox)
 }
 
 
+/*** Some handy macro's ***/
+
 #define ABS(x)		( (x)<0   ? -(x) : (x) )
  
 /*
@@ -146,22 +151,22 @@ inline int16_t mag(int16_t i, int16_t q)
 		return (MAX(q,((29*q/32) + (61*i/128))));
 }
 
-/* Note:
- * A simple IIR single pole low pass filter could be made for anti-aliasing.
- * Do this at full speed 16usec sampling, 
- * then for dsp_tim decimate with 1/8 (128usec)
- * and for dsp_fft decimate with 1/4 (64usec)
- * to obtain proper spectrum.
+/* 
+ * Note: A simple regression IIR single pole low pass filter could be made for anti-aliasing.
  * y(n) = (1-a)*y(n-1) + a*x(n) = y(n-1) + a*(x(n) - y(n-1))
  * in this a = T / (T + R*C)  
- *    T is sample period (e.g. 16usec) 
+ * Example:
+ *    T is sample period (e.g. 64usec) 
  *    RC the desired RC time: T*(1-a)/a.
- *    example: a=1/256 : RC = 255*16usec = 4.08msec ( 245Hz)
+ *    example: a=1/256 : RC = 255*64usec = 16msec (65Hz)
  */
 
-volatile int32_t q_sample, i_sample, a_sample;								// Latest sample values
 
-/*** DSP engine ***/
+
+volatile int32_t q_sample, i_sample, a_sample;								// Latest processed sample values
+
+/*** Include the desired DSP engine ***/
+
 #if DSP_FFT == 1
 #define AGC_TOP		 16383L
 #include "dsp_fft.c"
@@ -173,35 +178,65 @@ volatile int32_t q_sample, i_sample, a_sample;								// Latest sample values
 
 
 /** CORE1: ADC IRQ handler **/
-#define LSH 	8															// Shift for higher level accuracy
-#define ADC_INT	8															// Nr of samples for integration (max 10)
-volatile int32_t adc_sample[3] = {0,0,0};									// Buffer for ADC samples
-volatile int32_t adc_result[3] = {0,0,0};									// Buffer for ADC results
+/*
+ * The IRQ handling is redirected to a DMA channel
+ * This will transfer ADC_INT samples per channel, ADC_INT maximum is 10 (would take 60usec)
+ */
+#define LSH 		8														// Shift for higher accuracy of level
+#define BSH			8														// Shift for higher accuracy of bias
+#define ADC_BIASS	ADC_BIAS<<BSH											// Shifted initial ADC bias
+#define ADC_INT		8														// Nr of samples for integration (max 8)
+volatile int16_t  adc_sample[ADC_INT][3];									// ADC samples collection
+volatile int32_t  adc_bias[3] = {ADC_BIASS, ADC_BIASS, ADC_BIASS};			// ADC dynamic bias level
+volatile int32_t  adc_result[3];											// ADC filtered result for further processing
 volatile uint32_t adc_level[3] = {10<<LSH,10<<LSH,10<<LSH};					// Levels for ADC channels
-volatile int adccnt = 0;
-void __not_in_flash_func(adcfifo_handler)(void)
+volatile int adccnt = 0;													// Sampling overflow indicator
+
+
+
+/** CORE1: DMA IRQ handler **/
+
+// From RP2040 datasheet, DMA Status/Control register layout
+// 0x80000000 [31]    : AHB_ERROR (0): Logical OR of the READ_ERROR and WRITE_ERROR flags
+// 0x40000000 [30]    : READ_ERROR (0): If 1, the channel received a read bus error
+// 0x20000000 [29]    : WRITE_ERROR (0): If 1, the channel received a write bus error
+// 0x01000000 [24]    : BUSY (0): This flag goes high when the channel starts a new transfer sequence, and low when the...
+// 0x00800000 [23]    : SNIFF_EN (0): If 1, this channel's data transfers are visible to the sniff hardware, and each...
+// 0x00400000 [22]    : BSWAP (0): Apply byte-swap transformation to DMA data
+// 0x00200000 [21]    : IRQ_QUIET (0): In QUIET mode, the channel does not generate IRQs at the end of every transfer block
+// 0x001f8000 [20:15] : TREQ_SEL (0): Select a Transfer Request signal
+// 0x00007800 [14:11] : CHAIN_TO (0): When this channel completes, it will trigger the channel indicated by CHAIN_TO
+// 0x00000400 [10]    : RING_SEL (0): Select whether RING_SIZE applies to read or write addresses
+// 0x000003c0 [9:6]   : RING_SIZE (0): Size of address wrap region
+// 0x00000020 [5]     : INCR_WRITE (0): If 1, the write address increments with each transfer
+// 0x00000010 [4]     : INCR_READ (0): If 1, the read address increments with each transfer
+// 0x0000000c [3:2]   : DATA_SIZE (0): Set the size of each bus transfer (byte/halfword/word)
+// 0x00000002 [1]     : HIGH_PRIORITY (0): HIGH_PRIORITY gives a channel preferential treatment in issue scheduling: in...
+// 0x00000001 [0]     : EN (0): DMA Channel Enable
+
+// 0x00120027 (IRQ_QUIET=0x0, TREQ_SEL=0x24, CHAIN_TO=0, INCR_WRITE=1, INCR_READ=0, DATA_SIZE=1, HIGH_PRIORITY=1, EN=1)	
+
+/*
+ * The DMA handler only stops conversions and resets interrupt flag, data is processed in timer callback.
+ */
+#define CH0			0
+#define DMA_CTRL0	0x00120027
+void __not_in_flash_func(dma_handler)(void)
 {
-	if (++adccnt >= ADC_INT)												// Nr of integration samples reached?
-	{
-		adc_irq_set_enabled(false);											// Disable interrupts
-		adc_run(false);														// Stop freerunning
-	}
-	adc_sample[0] = adc_sample[0] + adc_fifo_get() - ADC_BIAS;				// Read first three samples from FIFO
-	adc_sample[1] = adc_sample[1] + adc_fifo_get() - ADC_BIAS;
-	adc_sample[2] = adc_sample[2] + adc_fifo_get() - ADC_BIAS;
-	adccnt++;
+	adc_run(false);															// Stop freerunning ADC
+	dma_hw->ints0 = 1u << CH0;												// Clear the interrupt request.
+	//while (!adc_fifo_is_empty()) adc_fifo_get();							// Empty leftovers from fifo
+	adccnt++;																// ADC overrun indicator increment
 }
 
 
-
 /** CORE1: Timer callback routine **/
+
 /*
- * This runs every TIM_US , i.e. 16usec
- * First the decimation filter is applied on latest ADC results
+ * This runs every TIM_US, i.e. 64usec, and hence determines the actual sample rate
  * The filtered samples are set aside, so a new ADC cycle can be started. 
- * The ADC cycle takes 8usec to complete (3x ADC0..2 + 1x stray ADC0 conversion).
+ * One ADC cycle takes 6usec to complete (3x ADC0..2) + 1x 2usec stray ADC0 conversion.
  * The timing is critical, it assumes that the ADC is finished.
- * Once every 4 TIM_US intervals signal preprocessing is done, and DSP may be invoked.
  * Do not put any other stuff in this callback routine.
  */
 semaphore_t dsp_sem;
@@ -216,21 +251,31 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 	 * Here the rate is 15625Hz
 	 */
 
-	// Get DC bias corrected samples
-	adc_result[0] = adc_sample[0];
-	adc_result[1] = adc_sample[1];
-	adc_result[2] = adc_sample[2];
-	
-	// Re-start ADCs
-	while (!adc_fifo_is_empty()) adc_fifo_get();							// Empty leftovers from fifo
-	adc_sample[0] = 0;
-	adc_sample[1] = 0;
-	adc_sample[2] = 0;
-	adc_set_round_robin(0x01+0x02+0x04);									// Sequence ADC 0-1-2 (GP 26, 27, 28) free running
+	// Get samples and correct for DC bias  
+	adc_result[0] = 0;
+	adc_result[1] = 0;
+	adc_result[2] = 0;
+	for (temp = 0; temp<ADC_INT; temp++)
+	{
+		adc_bias[0]   += (int32_t)(adc_sample[temp][0]) - (adc_bias[0]>>BSH);
+		adc_result[0] += (int32_t)(adc_sample[temp][0]) - (adc_bias[0]>>BSH);
+		adc_bias[1]   += (int32_t)(adc_sample[temp][1]) - (adc_bias[1]>>BSH);
+		adc_result[1] += (int32_t)(adc_sample[temp][1]) - (adc_bias[1]>>BSH);
+		adc_bias[2]   += (int32_t)(adc_sample[temp][2]) - (adc_bias[2]>>BSH);
+		adc_result[2] += (int32_t)(adc_sample[temp][2]) - (adc_bias[2]>>BSH);
+	}
+		
+	// Resstart ADCs and DMA
+	adccnt--;																// ADC overrun indicator decrement
 	adc_select_input(0);													// Start with ADC0
-	adccnt=0;																// Check for ADC FIFO interrupt overruns
-	adc_run(true);															// Start ADC
-	adc_irq_set_enabled(true);												// Enable ADC interrupts
+	while (!adc_fifo_is_empty()) adc_fifo_get();							// Empty leftovers from fifo, if any
+
+	dma_hw->ch[CH0].read_addr = (io_rw_32)&adc_hw->fifo;					// Read from ADC FIFO
+	dma_hw->ch[CH0].write_addr = (io_rw_32)&adc_sample[0][0];				// Write to sample buffer
+	dma_hw->ch[CH0].transfer_count = ADC_INT * 3;							// Nr of 16 bit words to transfer
+	dma_hw->ch[CH0].ctrl_trig = DMA_CTRL0;									// Write ctrl word without starting the DMA
+
+	adc_run(true);															// Start ADC again
 
 	// Calculate and save level, left shifted by LSH
 	// a=1/1024 : RC = 1023*64usec = 65msec (15Hz)
@@ -238,7 +283,7 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 	adc_level[1] = (1023*adc_level[1] + (ABS(adc_result[1])<<LSH))/1024;
 	adc_level[2] = (1023*adc_level[2] + (ABS(adc_result[2])<<LSH))/1024;
 
-	// Crude AGC mechanism
+	// Crude AGC mechanism ** TO BE IMPROVED **
 	if (!tx_enabled)	
 	{
 		temp = (MAX(adc_level[1], adc_level[0]))>>LSH;						// Max I or Q
@@ -327,35 +372,44 @@ void __not_in_flash_func(dsp_loop)()
 	 * samples are stored in array through IRQ callback
 	 */
 	adc_init();																// Initialize ADC to known state
-	adc_set_clkdiv(0.0);													// Fastest clock (500 kSps)
 	adc_gpio_init(26);														// GP26 is ADC 0 for Q channel
 	adc_gpio_init(27);														// GP27 is ADC 1 for I channel
 	adc_gpio_init(28);														// GP28 is ADC 2 for Audio channel
 	adc_set_round_robin(0x01+0x02+0x04);									// Sequence ADC 0-1-2 (GP 26, 27, 28) free running
 	adc_select_input(0);													// Start with ADC0
-	adc_fifo_setup(true,false,3,false,false);								// IRQ result, fifo threshold = 1, so IRQ after each ADC0..2
-    irq_set_exclusive_handler(ADC_IRQ_FIFO, adcfifo_handler);				// Install ISR at ADC_IRQ_FIFO vector (22)
-	irq_set_priority (ADC_IRQ_FIFO, PICO_HIGHEST_IRQ_PRIORITY);				// Prevent race condition with timer
-	irq_set_enabled(ADC_IRQ_FIFO, true);									// Enable interrupt vector in NVIC
-	adc_irq_set_enabled(true);												// Enable the ADC FIFO interrupt
-	adc_run(true);
-	adc_level[0] = ADC_BIAS/2; 
-	adc_level[1] = ADC_BIAS/2;
-	adc_level[2] = ADC_BIAS/2;
-	
-	// Use alarm_pool_add_repeating_timer_us() for a core1 associated timer
-	// First create an alarm pool on core1:
-	// alarm_pool_t *alarm_pool_create( uint hardware_alarm_num, 
-	//                                  uint max_timers);
-	// For the core1 alarm pool don't use the default alarm_num (usually 3) but e.g. 1
-	// Timer callback signals semaphore, while loop blocks on getting it.
-	// Initialize repeating timer on core1:
-	// bool alarm_pool_add_repeating_timer_us( alarm_pool_t *pool, 
-	//                                         int64_t delay_us, 
-	//                                         repeating_timer_callback_t callback, 
-	//                                         void *user_data, 
-	//                                         repeating_timer_t *out);
+	adc_fifo_setup(true,true,3,false,false);								// IRQ result, DMA req, fifo thr=3: xfer per 3 x 16 bits
+	adc_set_clkdiv(0);														// Fastest clock (500 kSps)
 
+	/*
+	 * Setup and start DMA channel CH0
+	 */
+	dma_channel_set_irq0_enabled(CH0, true);								// Raise IRQ line 0 when the channel finishes a block
+	irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);						// Install IRQ handler
+	irq_set_enabled(DMA_IRQ_0, true);										// Enable it
+	irq_set_priority(DMA_IRQ_0, PICO_HIGHEST_IRQ_PRIORITY);					// Prevent race condition with timer
+	
+	dma_hw->ch[CH0].read_addr = (io_rw_32)&adc_hw->fifo;					// Read from ADC FIFO
+	dma_hw->ch[CH0].write_addr = (io_rw_32)&adc_sample[0][0];				// Write to sample buffer
+	dma_hw->ch[CH0].transfer_count = ADC_INT * 3;							// Nr of 16 bit words to transfer
+	dma_hw->ch[CH0].ctrl_trig = DMA_CTRL0;									// Write ctrl word and start the DMA
+
+	adc_run(true);															// Also start the ADC
+
+	
+	/*
+	 * Use alarm_pool_add_repeating_timer_us() for a core1 associated timer
+	 * First create an alarm pool on core1:
+	 * alarm_pool_t *alarm_pool_create( uint hardware_alarm_num, 
+	 *                                  uint max_timers);
+	 * For the core1 alarm pool don't use the default alarm_num (usually 3) but e.g. 1
+	 * Timer callback signals semaphore, while loop blocks on getting it.
+	 * Initialize repeating timer on core1:
+	 * bool alarm_pool_add_repeating_timer_us( alarm_pool_t *pool, 
+	 *                                          int64_t delay_us, 
+	 *                                         repeating_timer_callback_t callback, 
+	 *                                         void *user_data, 
+	 *                                         repeating_timer_t *out);
+	 */
 	sem_init(&dsp_sem, 0, 1);
 	ap = alarm_pool_create(1, 4);
 	alarm_pool_add_repeating_timer_us( ap, -TIM_US, dsp_callback, NULL, &dsp_timer);
@@ -368,8 +422,9 @@ void __not_in_flash_func(dsp_loop)()
 		dsp_overrun--;														// Decrement overrun counter
 
 		// Use adc_level[2] for VOX
-		vox_active = false;													// Normally false
-		if (vox_level != 0)													// Only when VOX is enabled
+		if (vox_level == 0)													// Only when VOX is enabled
+			vox_active = false;												// Normally false
+		else
 		{
 			if ((adc_level[2]>>LSH) > vox_level)							// AND level > limit
 			{
@@ -378,8 +433,8 @@ void __not_in_flash_func(dsp_loop)()
 			}
 			else if (--vox_count>0)											// else decrement linger counter
 				vox_active = true;											//  and keep TX active until 0
-
 		}
+
 
 		if (tx_enabled)														// Use previous setting
 		{
@@ -392,6 +447,7 @@ void __not_in_flash_func(dsp_loop)()
 			rx();															// Do RX signal processing
 		}
 		
+/////// This is a trap, ptt remains active after once asserted
 		tx_enabled = vox_active || ptt_active;								// Check RX or TX	
 		
 #if DSP_FFT == 1

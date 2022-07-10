@@ -53,6 +53,7 @@ target_link_libraries(uSDR-FFT
         hardware_clocks
 		hardware_pll
 		hardware_adc
+		hardware_dma
         )
 
 pico_add_extra_outputs(uSDR-FFT)

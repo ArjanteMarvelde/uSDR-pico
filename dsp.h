@@ -9,7 +9,8 @@
  * See dsp.c for more information 
  */
 
-#define DSP_FFT			1					// 1 for FFT, 0 for time domain processing
+// 1 for FFT, 0 for time domain processing
+#define DSP_FFT			0
 
 
 /* 
@@ -21,7 +22,7 @@
 
 #define TIM_US		   64
 #define S_RATE		15625					// 1e6/TIM_US
-#define FC_OFFSET	 3906  					// in bin FFT_SIZE/4 ==> S_RATE/4
+#define FC_OFFSET	 3906  					// RX carrier in bin FFT_SIZE/4 ==> S_RATE/4
 
 #else
 	
