@@ -16,9 +16,10 @@ The Pico controls an Si5351A clock module to obtain the switching clock for the 
 The display is a standard 16x2 LCD, but with an I2C interface. The display is connected through the **i2c1** channel, as well as the bus expanders for controlling the various relays.
 
 ## Open issues: 
-- [ ] implement AGC 
-- [ ] implement RSSI 
-- [ ] improve FFT-based signal processing
+- [ ] implement proper AGC 
+- [x] implement RSSI and S-meter  
+- [ ] improve FFT-based signal processing  
+- [ ] revisit Si5351A driver  
 
 ## Installing and using the SDK for Windows: 
 For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/ndabas/pico-setup-windows). In case this does not work, follow the instructions below.  
