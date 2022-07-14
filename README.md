@@ -1,9 +1,9 @@
 # uSDR-pico
-This Git repository contains a Micro-SDR implementation, based on a RP2040 Pi Pico. The project is highly experimental, foremost intended to investigate how the Pico HW and SDK work with an application like this. Also it is a platform to experiment with digital signal processing techniques. The repo contains the code for an experimental implementation of the control and signal processing for a QSD/QSE based transceiver. 
+This Git repository contains a Micro-SDR implementation, based on a RP2040 Pi Pico. The project is highly experimental, foremost intended to investigate how the Pico HW and SDK work with an application like this. Also it is a platform to experiment with digital signal processing techniques. The repository contains the code for an experimental implementation of the control and signal processing for a QSD/QSE based transceiver. 
 Furthermore, the repository contains the electronic design of some modules that cover the mixing, filtering and RF amplification.  
 
-The ZIP files contain a consistent package, but the latest code is in the files in the main directory.  
-The V3.00 package contains two signal processing engines, selectable with a compile switch in dsp.h. The first engine is the old time domain processor, more or less as in V2, and the second engine is a new FFT based processor.  
+The ZIP files contain a consistent package, but the latest code with all the bug fixes and some new features is in the files in the main directory.  
+The V3.00 package contains *two signal processing engines*, selectable with a compile switch in dsp.h. The first engine is the old time domain processor, more or less as in V2, and the second engine is a new FFT-based processor.  
 For a more detailed description of the software and the hardware, please refer to the elaborate documentation.  
 
 The platform used is a Pi Pico module with an RP2040 processor. This processor has dual cores, running default at 125MHz each, and a very configurable I/O which eases the HW design. The platform can be overclocked, but some functions seem to become unstable when pushed too far.
@@ -16,22 +16,12 @@ The Pico controls an Si5351A clock module to obtain the switching clock for the 
 The display is a standard 16x2 LCD, but with an I2C interface. The display is connected through the **i2c1** channel, as well as the bus expanders for controlling the various relays.
 
 ## Open issues: 
-- [x] take care of processing cycles, by moving signal processing parts to the second core
-- [x] add some more filtering
-- [x] implement the user I/O bit: LCD+Rotary encoder+buttons
-- [x] implement AGC 
-- [x] implement LSB
-- [x] implement AM
-- [x] SW based VOX
-- [ ] implement RSSI
-- [x] design a set of PCBs
-- [x] sort out the new HW modules
-- [x] improve speed: better dual-core management for memory and timer 
-- [x] add control for new HW: BPF and pre-amp/attenuator switching
-- [x] add frequency domain processing
+- [ ] implement AGC 
+- [ ] implement RSSI 
+- [ ] improve FFT-based signal processing
 
 ## Installing and using the SDK for Windows: 
-For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/ndabas/pico-setup-windows), but that seemed to be broken.  
+For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/ndabas/pico-setup-windows). In case this does not work, follow the instructions below.  
 
 ### Manual installation.  
 Doing it manually, first download the latest packages, in my case for Windows 10 on a 64 bit PC:  
@@ -139,8 +129,8 @@ The PCB files have been made with Eagle 5.11, and can be modified or otherwise r
 
 # Background
 The folder **$PICO/docs** also contains some manuals, of which the *C-SDK description*, the *RP2040 datasheet* and the *Pico Pinout* are absolute must-reads when you start writing software. Note that this folder is only created by the **ndabas** script, after manual installation you should find these on the Raspberry website.  
-For calculating filters I have used the free software from Iowa Hills (http://www.iowahills.com/8DownloadPage.html)  
-I also used the online FIR filter calculator T-Filter (http://t-filter.engineerjs.com/) 
+For calculating filters I have used the free software from [Iowa Hills](http://www.iowahills.com/8DownloadPage.html) (website has been down for a while)  
+I also used the online FIR filter calculator [T-Filter](http://t-filter.engineerjs.com/) 
 
 # Copyright notice
 **The code and electronic designs as well as the implementations presented in this repository can be copied and modified freely, for non-commercial use.
