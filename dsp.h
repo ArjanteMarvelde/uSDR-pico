@@ -35,6 +35,9 @@
 
 /** DSP module interface **/
 
+extern volatile uint32_t s_rssi;
+int get_sval(void);
+
 extern volatile bool tx_enabled;			// Determined by (vox_active || ptt_active)
 
 #define VOX_OFF			0

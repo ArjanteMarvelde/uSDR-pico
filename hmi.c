@@ -110,7 +110,7 @@ char hmi_noption[HMI_NSTATES] = {HMI_NTUNE, HMI_NMODE, HMI_NAGC, HMI_NPRE, HMI_N
 char hmi_o_menu[HMI_NSTATES][8] = {"Tune","Mode","AGC","Pre","VOX"};		// Indexed by hmi_state
 char hmi_o_mode[HMI_NMODE][8] = {"USB","LSB","AM ","CW "};					// Indexed by hmi_sub[HMI_S_MODE]
 char hmi_o_agc [HMI_NAGC][8] = {"NoGC","Slow","Fast"};						// Indexed by hmi_sub[HMI_S_AGC]
-char hmi_o_pre [HMI_NPRE][8] = {"-30dB","-20dB","-10dB","0dB","+10dB"};		// Indexed by hmi_sub[HMI_S_PRE]
+char hmi_o_pre [HMI_NPRE][8] = {"-30dB","-20dB","-10dB","  0dB","+10dB"};	// Indexed by hmi_sub[HMI_S_PRE]
 char hmi_o_vox [HMI_NVOX][8] = {"NoVOX","VOX-L","VOX-M","VOX-H"};			// Indexed by hmi_sub[HMI_S_VOX]
 char hmi_o_bpf [HMI_NBPF][8] = {"<2.5","2-6","5-12","10-24","20-40"};		// Indexed by 
 
@@ -314,7 +314,11 @@ void hmi_evaluate(void)
 	char s[32];
 	
 	// Print top line of display
-	sprintf(s, "%s %7.1f %c%3d", hmi_o_mode[hmi_sub[HMI_S_MODE]], (double)hmi_freq/1000.0, (tx_enabled?0x07:0x06), (tx_enabled?0:920));
+	if (tx_enabled)
+		sprintf(s, "%s %7.1f %c %-2d", hmi_o_mode[hmi_sub[HMI_S_MODE]], (double)hmi_freq/1000.0, 0x07, 0);
+	else
+		sprintf(s, "%s %7.1f %cS%-2d", hmi_o_mode[hmi_sub[HMI_S_MODE]], (double)hmi_freq/1000.0, 0x06, get_sval());
+
 	lcd_writexy(0,0,s);
 	
 	// Print bottom line of dsiplay, depending on state

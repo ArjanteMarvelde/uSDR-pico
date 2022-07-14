@@ -155,10 +155,10 @@ bool __not_in_flash_func(rx)(void)
 	int16_t *ip, *qp, *ap, *xip, *xqp;
 	int16_t peak;
 		
-	b = dsp_active;															// Point to Active buffer
+	b = dsp_active;															// Point to Active sample buffer
 	
 	/*** Copy saved I/Q buffers to FFT buffer ***/
-	if (++b > 2) b = 0;														// Point to Old Saved buffer
+	if (++b > 2) b = 0;														// Point to Old Saved sample buffer
 	ip = &I_buf[b][0]; xip = &XI_buf[0];
 	qp = &Q_buf[b][0]; xqp = &XQ_buf[0];
 	for (i=0; i<BUFSIZE; i++)
@@ -166,7 +166,7 @@ bool __not_in_flash_func(rx)(void)
 		*xip++ = *ip++;
 		*xqp++ = *qp++;
 	}
-	if (++b > 2) b = 0;														// Point to New Saved buffer
+	if (++b > 2) b = 0;														// Point to New Saved sample buffer
 	ip = &I_buf[b][0]; xip = &XI_buf[BUFSIZE];
 	qp = &Q_buf[b][0]; xqp = &XQ_buf[BUFSIZE];
 	for (i=0; i<BUFSIZE; i++)
@@ -244,16 +244,16 @@ bool __not_in_flash_func(rx)(void)
 
 	/*** Export FFT buffer to A ***/
 	b = dsp_active;															// Assume active buffer not changed, i.e. no overruns
-	if (++b > 2) b = 0;														// Point to oldest
-	ap = &A_buf[b][0]; xip = &XI_buf[0];
+	if (++b > 2) b = 0;														// Point to oldest (will be next for output)
+	ap = &A_buf[b][0]; xip = &XI_buf[BUFSIZE];
 	for (i=0; i<BUFSIZE; i++)
 	{
-		*ap++ = *xip++;														// Copy oldest results
+		*ap++ = *xip++;														// Copy newest results
 	}
 
 
 	/*** Scale down into DAC_RANGE! ***/	
-	peak = 64;
+	peak = 128;
 	for (i=0; i<BUFSIZE; i++)									
 	{
 		A_buf[b][i] /= peak;

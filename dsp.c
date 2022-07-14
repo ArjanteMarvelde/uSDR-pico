@@ -64,6 +64,47 @@ void dsp_setmode(int mode)
 
 
 /*
+ * S-Meter is based on RSSI, which is in fact the signal level in the preprocessor.
+ * The length of the (I,Q) vector is taken as reference for RSSI, where
+ * S value is highest bit set, i.e. RSSI of 512 corresponds with S-9 (S=log2(RSSI))
+ * This value was calibrated roughly by using the sam antenna and 
+ *   comparing an IC R71-E with my uSDR HW implementation and ADC_INT=8.
+ * +20dB means 10x the S-9 RSSI level, or >5120
+ * +40dB means 100x the S-9 RSSI level, or >51200
+ */
+#define S940	51200
+#define S930	16180
+#define S920	5120
+#define S910	1618
+#define S9		512
+#define S8		256
+#define S7		128
+#define S6		64
+#define S5		32
+#define S4		16
+#define S3		8
+#define S2		4
+#define S1		2
+volatile uint32_t s_rssi;													// 1.. >51200
+int get_sval(void)
+{
+	uint32_t s_val = s_rssi;
+	if (s_val>S940) return(94);												// Return max 2 digits!
+	if (s_val>S930) return(93);
+	if (s_val>S920) return(92);
+	if (s_val>S910) return(91);
+	if (s_val>S9)   return(9);
+	if (s_val>S8)   return(8);
+	if (s_val>S7)   return(7);
+	if (s_val>S6)   return(6);
+	if (s_val>S5)   return(5);
+	if (s_val>S4)   return(4);
+	if (s_val>S3)   return(3);
+	if (s_val>S2)   return(2);
+	return(1);
+}
+
+/*
  * AGC reference level is log2(0x40) = 6, where 0x40 is the MSB of half DAC_RANGE
  * 1/AGC_DECAY and 1/AGC_ATTACK are multipliers before agc_gain value integrator
  * These values should ultimately be set by the HMI.
@@ -71,6 +112,7 @@ void dsp_setmode(int mode)
  * So when delta is 1, and attack is 64, the time is 64/15625 = 4msec (fast attack)
  * The decay time is about 100x this value
  * Slow attack would be about 4096
+
  */
 #define AGC_REF		6
 #define AGC_DECAY	8192
@@ -79,6 +121,7 @@ void dsp_setmode(int mode)
 #define AGC_DIS		32766
 volatile uint16_t agc_decay  = AGC_DIS;
 volatile uint16_t agc_attack = AGC_DIS;
+
 void dsp_setagc(int agc)
 {
 	switch(agc)
@@ -135,6 +178,7 @@ void dsp_setvox(int vox)
 #define ABS(x)		( (x)<0   ? -(x) : (x) )
  
 /*
+ * Calculation of vector length:
  * Z = alpha*max(i,q) + beta*min(i,q); 
  * alpha = 1/1, beta = 3/8 (error<6.8%)
  * alpha = 15/16, beta = 15/32 (error<6.25%)
@@ -153,12 +197,17 @@ inline int16_t mag(int16_t i, int16_t q)
 
 /* 
  * Note: A simple regression IIR single pole low pass filter could be made for anti-aliasing.
- * y(n) = (1-a)*y(n-1) + a*x(n) = y(n-1) + a*(x(n) - y(n-1))
+ *  y(n) = (1-a)*y(n-1) + a*x(n) = y(n-1) + a*(x(n) - y(n-1))
  * in this a = T / (T + R*C)  
  * Example:
  *    T is sample period (e.g. 64usec) 
  *    RC the desired RC time: T*(1-a)/a.
  *    example: a=1/256 : RC = 255*64usec = 16msec (65Hz)
+ * Alternative faster implementation with higher accuracy
+ *  y(n) = y(n-1) + (x(n) - y(n-1)>>b)
+ * Here the filtered value is maintained in higher accuracy, i.e. left shifted by b bits.
+ * Before using the value: y >> b. 
+ * Also, for RC value 1/a = 1<<b, or RC = ((1<<b)-1)*64us
  */
 
 
@@ -182,14 +231,15 @@ volatile int32_t q_sample, i_sample, a_sample;								// Latest processed sample
  * The IRQ handling is redirected to a DMA channel
  * This will transfer ADC_INT samples per channel, ADC_INT maximum is 10 (would take 60usec)
  */
-#define LSH 		8														// Shift for higher accuracy of level
-#define BSH			8														// Shift for higher accuracy of bias
+#define LSH 		8														// Shift for higher accuracy of level, also LPF
+#define ADC_LEVELS	(ADC_BIAS/2)<<LSH										// Shifted initial ADC level
+#define BSH			8														// Shift for higher accuracy of bias, also LPF
 #define ADC_BIASS	ADC_BIAS<<BSH											// Shifted initial ADC bias
 #define ADC_INT		8														// Nr of samples for integration (max 8)
 volatile int16_t  adc_sample[ADC_INT][3];									// ADC samples collection
 volatile int32_t  adc_bias[3] = {ADC_BIASS, ADC_BIASS, ADC_BIASS};			// ADC dynamic bias level
 volatile int32_t  adc_result[3];											// ADC filtered result for further processing
-volatile uint32_t adc_level[3] = {10<<LSH,10<<LSH,10<<LSH};					// Levels for ADC channels
+volatile uint32_t adc_level[3] = {ADC_LEVELS, ADC_LEVELS, ADC_LEVELS};		// Levels for ADC channels
 volatile int adccnt = 0;													// Sampling overflow indicator
 
 
@@ -251,7 +301,8 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 	 * Here the rate is 15625Hz
 	 */
 
-	// Get samples and correct for DC bias  
+	// Get samples and correct for DC bias
+	// RC: ((1<<BSH)-1)*64usec = 16msec
 	adc_result[0] = 0;
 	adc_result[1] = 0;
 	adc_result[2] = 0;
@@ -277,17 +328,23 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 
 	adc_run(true);															// Start ADC again
 
-	// Calculate and save level, left shifted by LSH
-	// a=1/1024 : RC = 1023*64usec = 65msec (15Hz)
-	adc_level[0] = (1023*adc_level[0] + (ABS(adc_result[0])<<LSH))/1024;
-	adc_level[1] = (1023*adc_level[1] + (ABS(adc_result[1])<<LSH))/1024;
-	adc_level[2] = (1023*adc_level[2] + (ABS(adc_result[2])<<LSH))/1024;
+	// Calculate and save level, value is left shifted by LSH = 8
+	// RC: ((1<<LSH)-1)*64usec = 16msec
+	adc_level[0] += (ABS(adc_result[0]))-(adc_level[0]>>LSH);
+	adc_level[1] += (ABS(adc_result[1]))-(adc_level[1]>>LSH);
+	adc_level[2] += (ABS(adc_result[2]))-(adc_level[2]>>LSH);
 
-	// Crude AGC mechanism ** TO BE IMPROVED **
+	// Derive RSSI value from RX vector length
+	// Crude AGC mechanism **TO BE IMPROVED**
 	if (!tx_enabled)	
 	{
-		temp = (MAX(adc_level[1], adc_level[0]))>>LSH;						// Max I or Q
-		rx_agc = (temp==0) ? AGC_TOP : AGC_TOP/temp;						// calculate required AGC factor
+		uint32_t i=adc_level[1],q=adc_level[0];
+		if (i>q)
+			temp = (MAX(i,((29*i/32) + (61*q/128))))>>LSH;
+		else
+			temp = (MAX(q,((29*q/32) + (61*i/128))))>>LSH;
+		s_rssi = MAX(1,temp);
+		rx_agc = AGC_TOP/s_rssi;											// calculate required AGC factor
 	}
 		
 #if DSP_FFT == 1

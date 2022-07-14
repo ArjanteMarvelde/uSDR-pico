@@ -139,7 +139,7 @@ bool __not_in_flash_func(rx)(void)
 	 * Scale and clip output,  
 	 * Send to audio DAC output
 	 */
-	a_sample = (a_sample/32) + DAC_BIAS;									// -15dB and add bias level
+	a_sample = (a_sample/64) + DAC_BIAS;									// -18dB and add bias level
 	if (a_sample > DAC_RANGE)												// Clip to DAC range
 		a_sample = DAC_RANGE;
 	else if (a_sample<0)

@@ -42,7 +42,7 @@
 #include "fix_fft.h"
 
 
-/** Fixed point Sine lookup table, [-1, 1] == [-32766, 32767] **/
+/** Fixed point Sine lookup table, [-1, 1] == [-32768, 32767] **/
 int16_t Sine[3*FFT_SIZE/4] =
 {
 	    0,    201,    402,    603,    804,   1005,   1206,   1406,
@@ -217,13 +217,13 @@ static int16_t bitrev[FFT_SIZE] =
 /*
  * Assume Q(0,15) notation, 1 sign, 0 int, 15 frac bits
  */
-int16_t __not_in_flash_func(FIX_MPY)(int16_t a, int16_t b)								        // Fixed-point mpy and scaling
+int16_t __not_in_flash_func(FIX_MPY)(int16_t a, int16_t b)					// Fixed-point mpy and scaling
 {
 	int32_t c;
 
 	c = (int32_t)a * (int32_t)b;											// multiply 
 	c = c + 0x4000;															// and round up
-	c = c >>15;														        // Shift right fractional bits
+	c = c >> 15;														    // Shift right fractional bits
 	return((int16_t)c);													    // Return scaled product
 }
 
@@ -287,6 +287,7 @@ int __not_in_flash_func(fix_fft)(int16_t *fr, int16_t *fi, bool inverse)
 			j = m << (k-1);													// 0 <= j < FFT_SIZE/2
 			wr = Sine[j+FFT_SIZE/4];										// Real part, i.e. Cosine
 			wi = inverse ? Sine[j] : -Sine[j];								// Imaginary part
+			
 			if (shift) { wr = wr/2; wi = wi/2; }							// Scale factors by 1/2
 
 			for (i=m; i<FFT_SIZE; i+=(step*2))								// #cycles: FFT_SIZE/step
@@ -294,10 +295,8 @@ int __not_in_flash_func(fix_fft)(int16_t *fr, int16_t *fi, bool inverse)
 				j = i + step;                                               // re-assign j !
 				tr = FIX_MPY(wr,fr[j]) - FIX_MPY(wi,fi[j]);					// Complex multiply
 				ti = FIX_MPY(wr,fi[j]) + FIX_MPY(wi,fr[j]);
-				if (shift)
-                    { qr = fr[i]/2; qi = fi[i]/2; }
-                else
-                    { qr = fr[i]; qi = fi[i]; }
+				qr = shift ? fr[i]/2 : fr[i]; 
+				qi = shift ? fi[i]/2 : fi[i]; 
 				fr[i] = qr + tr;
 				fi[i] = qi + ti;
 				fr[j] = qr - tr;

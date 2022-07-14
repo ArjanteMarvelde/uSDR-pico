@@ -177,16 +177,13 @@ void mon_or(void)
 /* 
  * ADC and AGC levels 
  */
-extern volatile uint32_t adc_level[3];	
 extern volatile int32_t  rx_agc;
 extern volatile int adccnt;
 void mon_adc(void)
 {
 	// Print results
-	printf("ADC0: %5u/2048\n", adc_level[0]>>8);
-	printf("ADC1: %5u/2048\n", adc_level[1]>>8);
-	printf("ADC2: %5u/2048\n", adc_level[2]>>8);
-	printf("AGC : %7d\n", rx_agc);
+	printf("RSSI: %5u\n", s_rssi);
+	printf("AGC : %5d\n", rx_agc);
 	printf("ADCc: %5d\n", adccnt);
 }
 
