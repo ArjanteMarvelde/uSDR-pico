@@ -3,7 +3,7 @@ This Git repository contains a Micro-SDR implementation, based on a RP2040 Pi Pi
 Furthermore, the repository contains the electronic design of some modules that cover the mixing, filtering and RF amplification.  
 
 The ZIP files contain a consistent package, but the latest code with all the bug fixes and some new features is in the files in the main directory.  
-The V3.00 package contains *two signal processing engines*, selectable with a compile switch in dsp.h. The first engine is the old time domain processor, more or less as in V2, and the second engine is a new FFT-based processor.  
+Startin with the V3.00 package it contains *two signal processing engines*, selectable with a compile switch in dsp.h. The first engine is the old time domain processor, more or less as in V2, and the second engine is a new FFT-based processor.  
 For a more detailed description of the software and the hardware, please refer to the elaborate documentation.  
 
 The platform used is a Pi Pico module with an RP2040 processor. This processor has dual cores, running default at 125MHz each, and a very configurable I/O which eases the HW design. The platform can be overclocked, but some functions seem to become unstable when pushed too far.
