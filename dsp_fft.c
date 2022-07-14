@@ -253,7 +253,7 @@ bool __not_in_flash_func(rx)(void)
 
 
 	/*** Scale down into DAC_RANGE! ***/	
-	peak = 128;
+	peak = 256;
 	for (i=0; i<BUFSIZE; i++)									
 	{
 		A_buf[b][i] /= peak;

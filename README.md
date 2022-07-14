@@ -18,7 +18,7 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 ## Open issues: 
 - [ ] implement proper AGC 
 - [x] implement RSSI and S-meter  
-- [ ] improve FFT-based signal processing  
+- [x] improve FFT-based signal processing  
 - [ ] revisit Si5351A driver  
 
 ## Installing and using the SDK for Windows: 

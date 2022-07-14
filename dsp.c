@@ -217,10 +217,10 @@ volatile int32_t q_sample, i_sample, a_sample;								// Latest processed sample
 /*** Include the desired DSP engine ***/
 
 #if DSP_FFT == 1
-#define AGC_TOP		 16383L
+#define AGC_TOP		 2047L
 #include "dsp_fft.c"
 #else
-#define AGC_TOP		 1500L
+#define AGC_TOP		 2047L
 #include "dsp_tim.c"
 #endif
 
@@ -345,6 +345,7 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 			temp = (MAX(q,((29*q/32) + (61*i/128))))>>LSH;
 		s_rssi = MAX(1,temp);
 		rx_agc = AGC_TOP/s_rssi;											// calculate required AGC factor
+		if (rx_agc==0) rx_agc=1;
 	}
 		
 #if DSP_FFT == 1
