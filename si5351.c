@@ -9,13 +9,13 @@
  
 Si5351 principle of operation:
 ==============================
-Crystal frequency Fxtal (usually 25MHz) is multiplied in a PLL by MSN to obtain Fvco.
-PLL A and B have independent MSN values, the Fout channel i can be derived from either.
-Fvco is between 600MHz and 900MHz, but the spec in reality is more relaxed.
-Fvco is divided by MSi and Ri to obtain the output frequency Fout.
-MSi and Ri are selected to be in the ballpark of desired frequency range.
-MSN is then used for tuning.
-Only certain values of MSi and Ri are allowed when quadrature output is needed.
+Crystal frequency <Fxtal> (usually 25MHz) is multiplied in a PLL by <MSN> to obtain <Fvco>.
+PLL A and B have independent MSN values, the <Fout> on channel <i> can be derived from either.
+<Fvco> must be between 600MHz and 900MHz, but the spec is more relaxed in reality.
+<Fvco> is divided by <MSi> and <Ri> to obtain the output frequency <Fout>.
+<MSi> and <Ri> are selected to be in the ballpark of desired frequency range.
+<MSN> is then used for tuning <Fout>.
+Only certain values of <MSi> and <Ri> are allowed when quadrature output is required.
 
              +-------+             +-------+     +------+
  - Fxtal --> | * MSN | -- Fvco --> | / MSi | --> | / Ri | -- Fout -->
@@ -27,28 +27,24 @@ Details:
  MSN determines:          Fvco = Fxtal * (MSN)      , where MSN = a + b/c
  MSi and Ri determine:    Fout = Fvco / (Ri*MSi)    , where MSi = a + b/c	(different a, b and c)
  
- ---Derivation of register values, for MSN and MSi---
+ ---Derivation of the register values, that determine MSN and MSi---
  P1 = 128*a + Floor(128*b/c) - 512
  P2 = 128*b - c*Floor(128*b/c)			(P2 = 0 for MSi integer mode, or calculated for MSN tuning)
  P3 = c									(P3 = 1 for MSi integer mode, or P3 = 1000000 for MSN tuning)
  
- This VFO implementation assumes PLLA is used for clk0 and clk1, PLLB is used for clk2
+ This VFO implementation assumes PLLA is used for VFO0 (clk0 and clk1), and PLLB is used for VFO1 (clk2)
  
- Algorithm to get from frequency to synthesizer settings:
- (this assumes that the current settings are consistent, i.e. must be initialized at startup)
- | calculate new MSN from the desired Fout, based on current Ri and MSi
+ The algorithm to get from required Fout to synthesizer settings:
+ | calculate new <MSN> from the desired <Fout>, based on the current <Ri> and <MSi>
  | if MSN is still inside [600/Fxtal, 900/Fxtal]
  | then
- |   just write the MSN parameter registers
+ |   just update the MSN related registers
  | else 
- |   re-calculate MSi, Ri and MSN from desired Fout
- |   write the MSi and Ri parameter registers, including phase offset (MSi equals phase offset for 90 deg, use INV to shift 180deg more)
- |   write the MSN parameter registers
+ |   re-calculate <MSi>, <Ri> and <MSN> from desired <Fout>
+ |   write the <MSi> and <Ri> parameter registers, including phase offset (MSi equals phase offset for 90 deg, use INV to shift 180deg more)
+ |   write the <MSN> parameter registers
  |   reset PLL
-
-Ri=128 for Fout   <1 MHz
-Ri= 32 for Fout  1-6 MHz
-Ri=  1 for Fout   >6 MHz
+ (this all assumes that the current settings are consistent, i.e. must be initialized at startup)
 
 Some boundary values:
 Ri		MSi		Lo MHz	    Hi MHz
@@ -70,7 +66,10 @@ Quadrature Phase offsets (i.e. delay):
 - Offset for MS0 (reg 165) must be 0 (cosine), 
 - Offset for MS1 (reg 166) must be equal to divider MS1 for 90 deg (sine),
 - Set INV bit (reg 17) to add 180 deg.
-NOTE: Phase offsets only work when Ri = 1, this means minimum Fout is 4.762MHz at Fvco = 600MHz. Additional flip/flop dividers are needed to get 80m band frequencies, or Fvco must be tuned below spec.
+
+NOTE: Phase offsets only work when Ri = 1, 
+This implies that minimum Fout is 4.762MHz at Fvco = 600MHz. 
+Additional flip/flop dividers are needed to get down to 80m band frequencies, or Fvco must be tuned below spec.
 
  
 Control Si5351 (see AN619):
@@ -159,10 +158,12 @@ Control Si5351 (see AN619):
 #define SI_PLL_RESET	177
 #define SI_XTAL_LOAD	183
 
-// CLK_OE register 3 values
+// CLK_OE register 3 masks
 #define SI_CLK0_ENABLE	0b00000001											// Enable clock 0 output
 #define SI_CLK1_ENABLE	0b00000010											// Enable clock 1 output
 #define SI_CLK2_ENABLE	0b00000100											// Enable clock 2 output
+#define SI_VFO0_DISABLE	0b00000011											// Set bits to disable
+#define SI_VFO1_DISABLE	0b00000100											// Set bits to disable
 
 // CLKi_CTL register 16, 17, 18 values
 // Normally 0x4f for clk 0 and 1, 0x6f for clk 2
@@ -184,8 +185,59 @@ Control Si5351 (see AN619):
 #define SI_PLL_C		1000000UL											// Parameter c for PLL-A and -B setting
 
 
+typedef struct
+{
+	uint32_t freq;		// type can hold up to 4GHz
+	uint8_t  flag;		// flag != 0 when update needed
+	uint8_t  phase;		// in quarter waves (0, 1, 2, 3)
+	uint8_t  ri;		// Ri (1 .. 128)
+	uint8_t  msi;		// MSi parameter a (4, 6, 8 .. 126)
+	double   msn;		// MSN (24.0 .. 35.9999)
+} vfo_t;
+vfo_t vfo[2];																// 0: clk0 / clk1     1: clk2
 
-vfo_t vfo[2];																// 0: clk0 & clk1     1: clk2
+
+void si_setfreq(int i, uint32_t f)
+{
+	if ((i<0)||(i>1)) return;												// Check VFO range
+	if (f>150000000) return;												// Check frequency range
+	if (vfo[i].freq == f) return;											// Anything to set at all?
+	
+	vfo[i].freq = f; 														// Entry checks pass, so do the actual setting
+	vfo[i].flag = 1;
+}
+
+void si_setphase(int i, uint8_t p)
+{
+	if (i!=0) return;														// Check VFO range
+	if (p>3) return;														// Check phase range
+	if (vfo[i].phase == p) return;											// Anything to set at all?
+	
+	vfo[i].phase = p; 														// Entry checks pass, so do the actual setting
+	vfo[i].flag = 1;
+}
+
+void si_enable(int i, bool en)
+{
+	uint8_t data[2];
+	
+	if ((i<0)||(i>1)) return;												// Check VFO range
+	
+	data[0] = SI_CLK_OE;													// Read OE register
+	i2c_write_blocking(i2c0, I2C_VFO, &data[0], 1, true);
+	i2c_read_blocking(i2c0, I2C_VFO, &data[1], 1, false);
+
+	data[0] = SI_CLK_OE;
+	if (i==0)
+	{
+		data[1] = en ? data[1]&~SI_VFO0_DISABLE : data[1]|SI_VFO0_DISABLE;
+	}
+	else
+	{
+		data[1] = en ? data[1]&~SI_VFO1_DISABLE : data[1]|SI_VFO1_DISABLE;
+	}
+	i2c_write_blocking(i2c0, I2C_VFO, &data[0], 2, false);
+}
 
 /* 
  * read contents of SI5351 registers, from reg to reg+len-1, output in data array 
@@ -207,23 +259,26 @@ int si_getreg(uint8_t *data, uint8_t reg, uint8_t len)
  * Optimize for speed, this may be called with short intervals
  * See also SiLabs AN619 section 3.2
  */
-void si_setmsn(uint8_t i)
+void si_setmsn(int i)
 {
 	uint8_t  data[16];														// I2C trx buffer
 	uint32_t P1, P2;														// MSN parameters
 	uint32_t A;
 	uint32_t B;
 
-	i=(i>0?1:0);
+	if ((i<0)||(i>1)) return;												// Check VFO range
 	
 	A  = (uint32_t)(floor(vfo[i].msn));										// A is integer part of MSN
-	B  = (uint32_t)((vfo[i].msn - (float)A) * SI_PLL_C);					// B is C * fraction part of MSN (C is a constant)
-	P2 = (uint32_t)(floor((float)(128 * B) / (float)SI_PLL_C));
+	B  = (uint32_t)((vfo[i].msn - (double)A) * SI_PLL_C);					// B is C * fraction part of MSN (C is a constant)
+	P2 = (uint32_t)(floor((double)(128 * B) / (double)SI_PLL_C));
 	P1 = (uint32_t)(128 * A + P2 - 512);
 	P2 = (uint32_t)(128 * B - SI_PLL_C * P2);
 	
-	// transfer registers
-	data[0] = (i==0?SI_SYNTH_PLLA:SI_SYNTH_PLLB);
+	// transfer PLL A or PLL B registers
+	if (i==0)
+		data[0] = SI_SYNTH_PLLA;
+	else
+		data[0] = SI_SYNTH_PLLB;
 	data[1] = (SI_PLL_C & 0x0000FF00) >> 8;
 	data[2] = (SI_PLL_C & 0x000000FF);
 	data[3] = (P1 & 0x00030000) >> 16;
@@ -252,7 +307,10 @@ void si_setmsi(uint8_t i)
 	R  = vfo[i].ri;
 	R  = (R&0xf0) ? ((R&0xc0)?((R&0x80)?7:6):(R&0x20)?5:4) : ((R&0x0c)?((R&0x08)?3:2):(R&0x02)?1:0); // quick log2(r)
 	
-	data[0] = (i==0?SI_SYNTH_MS0:SI_SYNTH_MS2);
+	if (i==0)
+		data[0] = SI_SYNTH_MS0;
+	else
+		data[0] = SI_SYNTH_MS2;
 	data[1] = 0x00;
 	data[2] = 0x01;
 	data[3] = ((P1 & 0x00030000) >> 16) | (R << 4 );
@@ -272,18 +330,18 @@ void si_setmsi(uint8_t i)
 		if (vfo[0].phase&1)													// Phase is either 90 or 270 deg?
 		{
 			data[0] = SI_CLK1_PHOFF;
-			data[1] = vfo[0].msi;
+			data[1] = vfo[0].msi;											// offset == MSi for 90deg
 			i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
 		}
 		else																// Phase is 0 or 180 deg
 		{
 			data[0] = SI_CLK1_PHOFF;
-			data[1] = 0;
+			data[1] = 0;													// offset == 0 for 0deg
 			i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
 		}
 		if (vfo[0].phase&2)													// Phase is 180 or 270 deg?
 		{
-			data[0] = SI_CLK1_CTL;
+			data[0] = SI_CLK1_CTL;											// Then set the invert flag
 			data[1] = 0x5d;													// CLK1: INT, PLLA, INV, MS, 8mA
 			i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
 		}
@@ -304,13 +362,13 @@ void si_setmsi(uint8_t i)
  */
 void si_evaluate(void)
 {
-	float msn;
+	double msn;
 
 	if (vfo[0].flag)
 	{
-		msn = (float)(vfo[0].msi); 														// Re-calculate MSN
-		msn = msn * (float)(vfo[0].ri);
-		msn = msn * (float)(vfo[0].freq) / SI_XTAL_FREQ;
+		msn = (double)(vfo[0].msi); 										// Re-calculate MSN
+		msn = msn * (double)(vfo[0].ri);
+		msn = msn * (double)(vfo[0].freq) / SI_XTAL_FREQ;
 		if ((msn>=SI_MSN_LO)&&(msn<SI_MSN_HI))
 		{
 			vfo[0].msn = msn;
@@ -318,15 +376,25 @@ void si_evaluate(void)
 		}
 		else
 		{
-			vfo[0].ri  = (vfo[0].freq<1000000)?128:((vfo[0].freq<3000000)?32:1);		// Pre-scale Ri, stretch down Ri=1 range
-			if ((vfo[0].freq >= 3000000)&&(vfo[0].freq < 6000000))						// Low end of Ri=1 range
-				vfo[0].msi = (uint8_t)126;												// Maximum MSi on Fvco=(4x126)MHz
+			// Pre-scale Ri, stretch down Ri=1 range
+			if (vfo[0].freq<1000000)
+				vfo[0].ri  = 128;
+			else if (vfo[0].freq<3000000)
+				vfo[0].ri  = 32;
 			else
-				vfo[0].msi = (uint8_t)(750000000UL / (vfo[0].freq * vfo[0].ri)) & 0xfe;	// Calculate MSi on Fvco=750MHz
-			msn = (float)(vfo[0].msi); 													// Re-calculate MSN
-			msn = msn * (float)(vfo[0].ri);
-			msn = msn * (float)(vfo[0].freq) / SI_XTAL_FREQ;
+				vfo[0].ri  = 1;
+			
+			// Set MSi
+			if ((vfo[0].freq >= 3000000)&&(vfo[0].freq < 6000000))			// Handle Low end of Ri=1 range
+				vfo[0].msi = (uint8_t)126;									// Maximum MSi on Fvco=(4x126)MHz
+			else															// Or calculate MSi on Fvco=750MHz
+				vfo[0].msi = (uint8_t)(750000000UL / (vfo[0].freq * vfo[0].ri)) & 0x000000fe;
+
+			msn = (double)(vfo[0].msi); 									// Re-calculate MSN
+			msn = msn * (double)(vfo[0].ri);
+			msn = msn * (double)(vfo[0].freq) / SI_XTAL_FREQ;
 			vfo[0].msn = msn;
+			
 			si_setmsn(0);
 			si_setmsi(0);
 		}
@@ -424,9 +492,9 @@ void si_init(void)
 	data[1] = 0xa0;
 	i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
 
-	// Enable all outputs	
+	// Enable only VFO0 outputs	
 	data[0] = SI_CLK_OE;
-	data[1] = 0x00;
+	data[1] = ~SI_VFO0_DISABLE;
 	i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
 }
 

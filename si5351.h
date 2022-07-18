@@ -6,31 +6,28 @@
  * Created: March 2021
  * Author: Arjan
  *
+ * Driver for Si5351A chip.
+ * VFO 0 is a quadrature clock on outputs 0 and 1, 
+ * VFO 1 is a regular clock on output 2.
+ *
+ * The quadrature clock allows to set shared frequency and phase offsets of 0, 90, 180 and 270 deg
+ * The regular clock just allows to set frequency, phase is ignored
+ * 
  * See si5351.c for more information 
  *
  */ 
 
-
-
-typedef struct
-{
-	uint32_t freq;		// type can hold up to 4GHz
-	uint8_t  flag;		// flag != 0 when update needed
-	uint8_t  phase;		// in quarter waves (0, 1, 2, 3)
-	uint8_t  ri;		// Ri (1 .. 128)
-	uint8_t  msi;		// MSi parameter a (4, 6, 8 .. 126)
-	float    msn;		// MSN (24.0 .. 35.9999)
-} vfo_t;
-extern vfo_t vfo[2];	// Table contains all control data for three clk outputs, but 0 and 1 are coupled in vfo[0]
+#define PH000	0
+#define PH090	1
+#define PH180	2
+#define PH270	3
 
 int  si_getreg(uint8_t *data, uint8_t reg, uint8_t len);
 void si_init(void);
 void si_evaluate(void);
+void si_setfreq(int i, uint32_t f);
+void si_setphase(int i, uint8_t p);
+void si_enable(int i, bool en);
 
-#define SI_GETFREQ(i)		((((i)>=0)&&((i)<2))?vfo[(i)].freq:0)
-#define SI_INCFREQ(i, d)	if ((((i)>=0)&&((i)<2))&&((vfo[(i)].freq)<(150000000-(d)))) { vfo[(i)].freq += (d); vfo[(i)].flag = 1;}
-#define SI_DECFREQ(i, d)	if ((((i)>=0)&&((i)<2))&&((vfo[(i)].freq)>(d))) { (vfo[(i)].freq) -= (d); vfo[(i)].flag = 1;}
-#define SI_SETFREQ(i, f)	if ((((i)>=0)&&((i)<2))&&((f)<150000000)) { vfo[(i)].freq = (f); vfo[(i)].flag = 1;}
-#define SI_SETPHASE(i, p)	if (((i)>=0)&&((i)<2)) {vfo[(i)].phase = ((uint8_t)p)&3; vfo[(i)].flag = 1;}
 
 #endif /* _SI5351_H */

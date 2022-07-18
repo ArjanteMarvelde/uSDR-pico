@@ -6,15 +6,18 @@
  * 
  * Two PCF8574 expanders are on the I2C bus, one on the RX and one on the BPF board.
  * The RX (0x42) bit assignments:
- *  0: Enable -20dB attenuator
- *  1: Enable -10dB attenuator
- *  2: Enable +10dB pre-amplifier
+ *  0x03: Enable -20dB and -10dB attenuators
+ *  0x01: Enable -20dB attenuator
+ *  0x02: Enable -10dB attenuator
+ *  0x04: Enable +10dB pre-amplifier
+ *  0x00: No attenuator or pre-amp
+ *
  * The BPF (0x40) bit assignments:
- *  0: Enable LPF  2.5 MHz
- *  1: Enable BPF  2.0 - 6.0 MHz
- *  2: Enable BPF  5.0 -12.0 MHz
- *  3: Enable BPF 10.0 -24.0 MHz
- *  4: Enable BPF 20.0 -40.0 MHz
+ *  0x01: Enable LPF  2.5 MHz
+ *  0x02: Enable BPF  2.0 - 6.0 MHz
+ *  0x04: Enable BPF  5.0 -12.0 MHz
+ *  0x08: Enable BPF 10.0 -24.0 MHz
+ *  0x10: Enable BPF 20.0 -40.0 MHz
  * 
  */
 #include <stdio.h>

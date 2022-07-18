@@ -115,11 +115,12 @@ char hmi_o_vox [HMI_NVOX][8] = {"NoVOX","VOX-L","VOX-M","VOX-H"};			// Indexed b
 char hmi_o_bpf [HMI_NBPF][8] = {"<2.5","2-6","5-12","10-24","20-40"};		// Indexed by 
 
 // Map option to setting
-int  hmi_mode[4] = {MODE_USB, MODE_LSB, MODE_AM, MODE_CW};
-int  hmi_agc[3]  = {AGC_NONE, AGC_SLOW, AGC_FAST};
-int  hmi_pre[5]  = {REL_ATT_30, REL_ATT_20, REL_ATT_10, REL_ATT_00, REL_PRE_10};
-int  hmi_vox[4]  = {VOX_OFF, VOX_LOW, VOX_MEDIUM, VOX_HIGH};
-int  hmi_bpf[5]  = {REL_LPF2, REL_BPF6, REL_BPF12, REL_BPF24, REL_BPF40};
+int  hmi_mode[HMI_NMODE] = {MODE_USB, MODE_LSB, MODE_AM, MODE_CW};
+int  hmi_agc[HMI_NAGC]   = {AGC_NONE, AGC_SLOW, AGC_FAST};
+int  hmi_pre[HMI_NPRE]   = {REL_ATT_30, REL_ATT_20, REL_ATT_10, REL_ATT_00, REL_PRE_10};
+int  hmi_vox[HMI_NVOX]   = {VOX_OFF, VOX_LOW, VOX_MEDIUM, VOX_HIGH};
+int  hmi_bpf[HMI_NBPF]   = {REL_LPF2, REL_BPF6, REL_BPF12, REL_BPF24, REL_BPF40};
+
 
 int  hmi_state, hmi_option;													// Current state and menu option selection
 int  hmi_sub[HMI_NSTATES] = {4,0,0,3,0,2};									// Stored option selection per state
@@ -159,7 +160,7 @@ void hmi_handler(uint8_t event)
 		switch (event)
 		{
 		case HMI_E_ENTER:													// Commit current value
-			SI_SETFREQ(0, HMI_MULFREQ*(hmi_freq-FC_OFFSET));				// Commit frequency
+			si_setfreq(0, HMI_MULFREQ*(hmi_freq-FC_OFFSET));				// Commit frequency
 			break;
 		case HMI_E_ESCAPE:													// Enter submenus
 			hmi_sub[hmi_state] = hmi_option;								// Store selection (i.e. digit)
@@ -291,8 +292,8 @@ void hmi_init(void)
 	hmi_option = 4;															// Active kHz digit
 	hmi_freq = 7074000UL;													// Initial frequency
 
-	SI_SETFREQ(0, HMI_MULFREQ*(hmi_freq-FC_OFFSET));						// Set freq to 7074 kHz (depends on mixer type)
-	SI_SETPHASE(0, 1);														// Set phase to 90deg (depends on mixer type)
+	si_setfreq(0, HMI_MULFREQ*(hmi_freq-FC_OFFSET));						// Set freq to 7074 kHz (depends on mixer type)
+	si_setphase(0, 1);														// Set phase to 90deg (depends on mixer type)
 	
 	ptt_state  = PTT_DEBOUNCE;
 	ptt_active = false;
@@ -311,6 +312,7 @@ void hmi_init(void)
  */
 void hmi_evaluate(void)
 {
+	int band;
 	char s[32];
 	
 	// Print top line of display
@@ -373,11 +375,28 @@ void hmi_evaluate(void)
 	if (ptt_state == 0)														// Set PTT when debounced level low
 		ptt_active = true;
 
-	
+
 	/* Set parameters corresponding to latest entered option value */
-	SI_SETFREQ(0, HMI_MULFREQ*(hmi_freq-FC_OFFSET));						// Always set frequency
-	if (hmi_update)															// Others only when indicated
-	{	
+
+	// Frequency might have been changed in hmi_handler, so set anyway
+	si_setfreq(0, HMI_MULFREQ*(hmi_freq-FC_OFFSET));
+	
+	// Check bandfilter setting (thanks Alex)
+	if      (hmi_freq < 2500000UL)	band = REL_LPF2;
+	else if (hmi_freq < 6000000UL)	band = REL_BPF6;
+	else if (hmi_freq < 12000000UL) band = REL_BPF12;
+	else if (hmi_freq < 24000000UL) band = REL_BPF24;
+	else 							band = REL_BPF40;
+	if (band != hmi_bpf[hmi_sub[HMI_S_BPF]])								// Force update when changed
+	{
+		hmi_bpf[hmi_sub[HMI_S_BPF]] = band;
+		hmi_update = true; 
+	}
+	
+	// Update peripherals according to menu setting
+	// For frequency si5351 is set directly, HMI top line follows
+	if (hmi_update)
+	{
 		dsp_setmode(hmi_sub[HMI_S_MODE]);
 		dsp_setvox(hmi_sub[HMI_S_VOX]);
 		dsp_setagc(hmi_sub[HMI_S_AGC]);	

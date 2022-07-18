@@ -7,10 +7,15 @@
  * Author: Arjan te Marvelde
  *
  * See dsp.c for more information 
+ *
+ * HERE THE SELECTION BETWEEN TIME OR FREQUENCY DOMAIN PROCESSING IS MADE
+ * DO THIS BY SETTING THE #define DSP_FFT TO 0 OR TO 1 RESPECTIVELY
+ *
  */
 
-// 1 for FFT, 0 for time domain processing
-#define DSP_FFT			0
+#define DSP_FFT			1
+
+
 
 
 /* 
