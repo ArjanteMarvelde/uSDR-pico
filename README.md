@@ -19,7 +19,8 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 - [ ] implement proper AGC 
 - [x] implement RSSI and S-meter  
 - [x] improve FFT-based signal processing  
-- [ ] revisit Si5351A driver  
+- [x] revisit Si5351A driver  
+- [x] automatic bandfilter switching  
 
 ## Installing and using the SDK for Windows: 
 For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/ndabas/pico-setup-windows). In case this does not work, follow the instructions below.  
