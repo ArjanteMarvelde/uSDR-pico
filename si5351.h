@@ -27,6 +27,17 @@
 #define PH180	2
 #define PH270	3
 
+typedef struct
+{
+	uint32_t freq;		// type can hold up to 4GHz
+	uint8_t  flag;		// flag != 0 when update needed
+	uint8_t  phase;		// in quarter waves (0, 1, 2, 3)
+	uint8_t  ri;		// Ri (1 .. 128), but should be 1 for VFO 0
+	uint8_t  msi;		// MSi parameter a (4, 6, 8 .. 126)
+	double   msn;		// MSN (24.0 .. 35.9999)
+} vfo_t;
+
+
 int  si_getreg(uint8_t *data, uint8_t reg, uint8_t len);
 void si_init(void);
 void si_evaluate(void);

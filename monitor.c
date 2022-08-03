@@ -69,12 +69,38 @@ void mon_init()
 uint8_t si5351_reg[200];
 void mon_si(void)
 {
-	int base=0, nreg=200, i;
+	int base=0, nreg=0, i;
 
-	for (i=0; i<nreg; i++) si5351_reg[i] = 0xaa;
+	if (nargs>2) 
+	{
+		base = atoi(argv[1]);
+		nreg = atoi(argv[2]);
+	}
+	if ((base<0)||(base+nreg>200)) return;
+
+	for (i=0; i<200; i++) si5351_reg[i] = 0xaa;
 	si_getreg(si5351_reg, (uint8_t)base, (uint8_t)nreg);
-	for (i=0; i<nreg; i++) printf("%02x ",(int)(si5351_reg[i]));
+	for (i=0; i<nreg; i++) printf("%03d : %02x \n", base+i, (int)(si5351_reg[i]));
 	printf("\n");
+}
+
+/* 
+ * Dumps the VFO registers 
+ */
+extern vfo_t vfo[2];
+void mon_vfo(void)
+{
+	int i;
+
+	if (nargs>1) 
+		i = atoi(argv[1]);
+	if ((i<0)||(i>1)) return;
+
+	printf("Frequency: %lu\n", vfo[i].freq);
+	printf("Phase    : %u\n", (int)(vfo[i].phase));
+	printf("Ri       : %lu\n", (int)(vfo[i].ri));
+	printf("MSi      : %lu\n", (int)(vfo[i].msi));
+	printf("MSN      : %g\n\n", vfo[i].msn);
 }
 
 
@@ -192,10 +218,11 @@ void mon_adc(void)
 /*
  * Command shell table, organize the command functions above
  */
-#define NCMD	7
+#define NCMD	8
 shell_t shell[NCMD]=
 {
 	{"si",  2, &mon_si,  "si <start> <nr of reg>", "Dumps Si5351 registers"},
+	{"vfo", 3, &mon_vfo, "vfo <id>", "Dumps vfo[id] registers"},
 	{"lt",  2, &mon_lt,  "lt (no parameters)", "LCD test, dumps characterset on LCD"},
 	{"or",  2, &mon_or,  "or (no parameters)", "Returns overrun information"},
 	{"pt",  2, &mon_pt,  "pt (no parameters)", "Toggles PTT status"},
