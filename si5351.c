@@ -183,7 +183,8 @@ Control Si5351 (see AN619):
 #define SI_CLK_PLL 		0b00100000											// Select PLL B as MS source (default 0 = PLL A)
 #define SI_CLK_INV		0b00010000											// Invert output (i.e. phase + 180deg)
 #define SI_CLK_SRC		0b00001100											// Select output source: 11=MS, 00=XTAL direct
-#define SI_CLK_DRV		0b00000011											// Select output drive, increasingly: 2-4-6-8 mA (best risetime, use max = 11)
+#define SI_CLK_DRV		0b00000011											// Select output drive, increasingly: 2-4-6-8 mA 
+																			// Play with these to get a nice block output
 
 // PLL_RESET register 177 values
 #define SI_PLLB_RST		0b10000000											// Reset PLL B
@@ -352,7 +353,7 @@ void si_setmsi(uint8_t i)
 		data[0] = SI_SYNTH_MS1;												// Same data in synthesizer
 		i2c_write_blocking(i2c0, I2C_VFO, data, 9, false);
 		
-		if (vfo[0].phase&(PH000|PH270))										// Phase is either 90 or 270 deg?
+		if (vfo[0].phase&(PH090|PH270))										// Phase is 90 or 270 deg?
 		{
 			data[0] = SI_CLK1_PHOFF;
 			data[1] = vfo[0].msi;											// offset == MSi for 90deg
@@ -367,20 +368,20 @@ void si_setmsi(uint8_t i)
 		if (vfo[0].phase&(PH180|PH270))										// Phase is 180 or 270 deg?
 		{
 			data[0] = SI_CLK1_CTL;											// set the invert flag
-			data[1] = 0x1f;													// CLK1: nonINT, PLLA, INV, MS, 8mA
+			data[1] = 0x1d;													// CLK1: nonINT, PLLA, INV, MS, 4mA
 			i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
 		}
 		else
 		{
 			data[0] = SI_CLK1_CTL;											// clear the invert flag
-			data[1] = 0x0f;													// CLK1: nonINT, PLLA, nonINV, MS, 8mA
+			data[1] = 0x0d;													// CLK1: nonINT, PLLA, nonINV, MS, 4mA
 			i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
 		}
 	}
 	else
 	{
 		data[0] = SI_CLK2_CTL;												// set the invert flag
-		data[1] = 0x2f;														// CLK2: nonINT, PLLB, nonINV, MS, 8mA
+		data[1] = 0x2d;														// CLK2: nonINT, PLLB, nonINV, MS, 4mA
 		i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
 	}
 		
@@ -495,6 +496,13 @@ void si_init(void)
 	data[1] = 0x00;
 	i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
 	
+	// First time init of clock control registers
+	data[0] = SI_CLK0_CTL;
+	data[1] = 0x0d;															// CLK0: nonINT, PLLA, nonINV, MS, 4mA
+	data[2] = 0x0d;															// CLK1: nonINT, PLLA, nonINV, MS, 4mA
+	data[3] = 0x2d;															// CLK2: nonINT, PLLB, nonINV, MS, 4mA
+	i2c_write_blocking(i2c0, I2C_VFO, data, 4, false);
+			
 	// Initialize VFO values
 	vfo[0].freq  = 7074000;
 	vfo[0].flag  = 0;
