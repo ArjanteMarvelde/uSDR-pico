@@ -19,7 +19,8 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 - [ ] implement proper AGC 
 - [x] implement RSSI and S-meter  
 - [x] improve FFT-based signal processing  
-- [ ] revisit Si5351A driver  
+- [x] revisit Si5351A driver  
+- [x] automatic bandfilter switching  
 
 ## Installing and using the SDK for Windows: 
 For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/ndabas/pico-setup-windows). In case this does not work, follow the instructions below.  
@@ -107,7 +108,7 @@ Define some environment variables manually (these were not set right during inst
 setx PICO_SDK_PATH "<target folder>\pico-sdk"  
 setx PICO_TOOLCHAIN_PATH "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\11.2 2022.02"  
 ```
-Note that the actual ARM toolchain folder may be different: check it first!  
+*Note that the actual ARM toolchain folder may be different: check it first!*  
 Close this VS Developer Command Prompt window  
   
   
@@ -122,6 +123,7 @@ Before the first build you need to check and adapt the file **$PICO/uSDR-pico/CM
 All building is using the Visual Studio NMake, so it has to be done from a  **VS Developer Command Prompt for Pico** (*DCP*). This is found in the Start menu under VS 2022, and it is best to copy a shortcut in a more convenient place. Then the startup folder property in the shortcut can be changed to for example **$PICO**. Within this *DCP* all environment settings have been properly set to enable the building process.  
 In the *DCP* window, chdir to the **build** folder and execute: **cmake -G "NMake Makefiles" ..**   (do not forget the trailing dots, it points to the folder containing CMakeLists.txt).  
 Now you have initialized the make environment (for *nmake*) and by executing **nmake** in that same **build** folder, all SDK libraries and finally the Pi Pico loadable file **uSDR.uf2** will be created.  
+*Note that when environment errors are encountered, it may help to empty the build folder and re-issue the cmake command.*   
 Rebooting the Pico while the bootsel button is pressed will open a Windows Explorer window with the Pico shown as a Mass Storage Device (e.g. drive E:). Moving **uSDR.uf2** to the Pico is as easy as dragging and dropping this file into that MSD.  
   
 ## Releases:  
