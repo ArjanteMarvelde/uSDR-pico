@@ -338,13 +338,14 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 	// Crude AGC mechanism **TO BE IMPROVED**
 	if (!tx_enabled)	
 	{
+		// Approximate amplitude, with alpha max + beta min function
 		uint32_t i=adc_level[1],q=adc_level[0];
 		if (i>q)
 			temp = (MAX(i,((29*i/32) + (61*q/128))))>>LSH;
 		else
 			temp = (MAX(q,((29*q/32) + (61*i/128))))>>LSH;
 		s_rssi = MAX(1,temp);
-		rx_agc = AGC_TOP/s_rssi;											// calculate required AGC factor
+		rx_agc = AGC_TOP/s_rssi;											// calculate scaling factor
 		if (rx_agc==0) rx_agc=1;
 	}
 		
@@ -363,7 +364,7 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 		pwm_set_gpio_level(22, A_buf[dsp_active][dsp_tick] + DAC_BIAS);		// Output A to DAC
 	}
 	
-	// When sample buffer is full, move pointer and signal DSP loop
+	// When sample buffer is full, move pointer to next and signal the DSP loop
 	if (++dsp_tick >= BUFSIZE)												// Increment tick and check range
 	{
 		dsp_tick = 0;														// Reset counter
@@ -505,7 +506,7 @@ void __not_in_flash_func(dsp_loop)()
 			rx();															// Do RX signal processing
 		}
 		
-/////// This is a trap, ptt remains active after once asserted
+/////// This is a trap, ptt remains active after once asserted: to be checked!
 		tx_enabled = vox_active || ptt_active;								// Check RX or TX	
 		
 #if DSP_FFT == 1

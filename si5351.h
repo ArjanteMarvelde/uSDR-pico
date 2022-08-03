@@ -10,13 +10,18 @@
  * VFO 0 is a quadrature clock on outputs 0 and 1, 
  * VFO 1 is a regular clock on output 2.
  *
- * The quadrature clock allows to set shared frequency and phase offsets of 0, 90, 180 and 270 deg
- * The regular clock just allows to set frequency, phase is ignored
+ * VFO 0 allows to set frequency and phase offsets of 0-90-180-270 deg (delay clk1 wrt clk0)
+ * VFO 1 just allows to set frequency, phase is ignored
  * 
+ * Use the 'set' functions to change VFO settings.
+ * Make regular calls to the 'evaluate' function to commit the changes (if any).
+ * To get smooth tuning, a suggested interval is 0.1sec, e.g. from a timer loop
+ *
  * See si5351.c for more information 
  *
  */ 
 
+// Phase definitions for si_setphase()
 #define PH000	0
 #define PH090	1
 #define PH180	2
