@@ -189,29 +189,34 @@ Control Si5351 (see AN619):
 #define SI_VFO1CTL		0b00101101											// nonINT, PLLB, nonINV, SRC=MS, 4mA
 
 // PLL_RESET register 177 values
-#define SI_PLLB_RST		0b10000000											// Reset PLL B
-#define SI_PLLA_RST		0b00100000											// Reset PLL A
+#define SI_PLLB_RST		0b10001100											// Reset PLL B
+#define SI_PLLA_RST		0b00101100											// Reset PLL A
 
 
 
 #define SI_XTAL_FREQ	25001414UL											// Replace with measured crystal frequency of XTAL for CL = 10pF (default)
 #define SI_MSN_LO		((0.4e9)/SI_XTAL_FREQ)								// Should be 600M, but 400MHz works too
 #define SI_MSN_HI		((0.9e9)/SI_XTAL_FREQ)
+#define SI_VCO_LO		400000000UL											// Should be 600MHz, but 400MHz works too
+#define SI_VCO_HI		900000000UL
 #define SI_PLL_C		1000000UL											// Parameter c for PLL-A and -B setting
 
 
 vfo_t vfo[2];																// 0: clk0 / clk1     1: clk2
 
-
-void si_setfreq(int i, uint32_t f)
+int  si_getvfo(int i, vfo_t *v)
 {
-	if ((i<0)||(i>1)) return;												// Check VFO range
-	if (f>150000000) return;												// Check frequency range
-	if (vfo[i].freq == f) return;											// Anything to set at all?
+	if ((i<0)||(i>1)) return 0;												// Check VFO range
 	
-	vfo[i].freq = f; 														// Entry checks pass, so do the actual setting
-	vfo[i].flag |= 0x01;
+	v->freq = vfo[i].freq;
+	v->phase = vfo[i].phase;
+	v->ri = vfo[i].ri;
+	v->msi = vfo[i].msi;
+	v->msn = vfo[i].msn;
+	
+	return 1;
 }
+
 
 void si_setphase(int i, uint8_t p)
 {
@@ -220,7 +225,6 @@ void si_setphase(int i, uint8_t p)
 	if (vfo[i].phase == p) return;											// Anything to set at all?
 	
 	vfo[i].phase = p; 														// Entry checks pass, so do the actual setting
-	vfo[i].flag |= 0x02;
 }
 
 void si_enable(int i, bool en)
@@ -309,7 +313,7 @@ void si_setmsn(int i)
  P3 = c
 
  */
-void si_setmsi(uint8_t i)
+void si_setmsi(int i)
 {
 	uint8_t data[16];														// I2C trx buffer
 	uint32_t P1;
@@ -317,7 +321,8 @@ void si_setmsi(uint8_t i)
 
 	if ((i<0)||(i>1)) return;												// Check VFO range
 	
-	P1 = (uint32_t)(128*(uint32_t)floor(vfo[i].msi) - 512);
+	P1 = vfo[i].msi;														// Upgrade msi to uint32_t
+	P1 = 128*P1-512;
 	R  = vfo[i].ri;
 	R  = (R&0xf0) ? ((R&0xc0)?((R&0x80)?7:6):(R&0x20)?5:4) : ((R&0x0c)?((R&0x08)?3:2):(R&0x02)?1:0); // quick log2(r)
 	
@@ -353,6 +358,7 @@ void si_setmsi(uint8_t i)
 			data[1] = 0;													// offset == 0 for 0deg
 			i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
 		}
+		sleep_us(500);
 		if ((vfo[0].phase==PH180)||(vfo[0].phase==PH270))					// Phase is 180 or 270 deg?
 		{
 			data[0] = SI_CLK0_CTL;											// set the invert flag
@@ -367,112 +373,77 @@ void si_setmsi(uint8_t i)
 			data[2] = SI_VFO0CTL;											// CLK1: nonINV
 			i2c_write_blocking(i2c0, I2C_VFO, data, 3, false);
 		}
+
+		// Reset PLL A (use with care, this causes a click)
+		sleep_us(500);
+		data[0] = SI_PLL_RESET;
+		data[1] = SI_PLLA_RST|SI_PLLB_RST;
+		i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
 	}
 	else
 	{
 		data[0] = SI_CLK2_CTL;												// set the invert flag
 		data[1] = SI_VFO1CTL;												// CLK2: nonINV
 		i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
-	}
-		
-	// Reset associated PLL
-	data[0] = SI_PLL_RESET;
-	data[1] = (i==1)?SI_PLLB_RST:SI_PLLA_RST;
-	i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
+
+		// Reset PLL B (use with care, this causes a click)
+		sleep_us(500);
+		data[0] = SI_PLL_RESET;
+		data[1] = SI_PLLA_RST|SI_PLLB_RST;
+		i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
+	}		
 }
 
 
 /*
  * This function needs to be invoked at regular intervals, e.g. 10x per sec. See hmi.c
- * For each vfo, calculate required MSN setting, MSN = MSi*Ri*Fout/Fxtal
+ * For VFO i, calculate required MSN setting, MSN = MSi*Ri*Fout/Fxtal based on required frequency
+ *
  * If still in range, 
  *	then just set MSN registers
  * else, 
  *	recalculate MSi and Ri as well
  *	set MSN, MSi and Ri registers (implicitly resets PLL)
  */
-void si_evaluate(void)
+void si_evaluate(int i, uint32_t freq)
 {
-	double msn;
+	double   msn;
+	uint32_t fvco;
 
-	if (vfo[0].flag)
+	if ((i<0)||(i>1)) return;												// Check VFO range
+	if (vfo[i].freq == freq) return;										// Nothing to do
+	
+	
+	fvco = freq*vfo[i].msi;													// Required Fvco
+	if ((fvco>=SI_VCO_LO)&&(fvco<SI_VCO_HI))								// Check MSN range
 	{
-		msn = (double)(vfo[0].msi); 										// Re-calculate MSN
-		msn = msn * (double)(vfo[0].ri);
-		msn = msn * (double)(vfo[0].freq) / SI_XTAL_FREQ;
-		
-		if ((msn>=SI_MSN_LO)&&(msn<SI_MSN_HI))								// Check MSN range
-		{
-			vfo[0].msn = msn;
-			si_setmsn(0);
-		}
-		else
-		{
-			// Pre-scale Ri, stretch down Ri=1 range to 3MHz
-			// Otherwise use just 32 and 128
-			if (vfo[0].freq>3000000)
-				vfo[0].ri  = 1;
-			else if (vfo[0].freq>1000000)
-				vfo[0].ri  = 32;
-			else
-				vfo[0].ri  = 128;
-			
-			// Set MSi
-			if ((vfo[0].freq >= 3000000)&&(vfo[0].freq < 6000000))			// Handle Low end of Ri=1 range
-				vfo[0].msi = (uint8_t)126;									// Maximum MSi on Fvco=(4x126)MHz
-			else															// Or calculate MSi on Fvco=750MHz
-				vfo[0].msi = (uint8_t)((750000000UL / (vfo[0].freq * vfo[0].ri)) & 0x000000fe);
-
-			msn = (double)(vfo[0].msi); 									// Re-calculate MSN
-			msn = msn * (double)(vfo[0].ri);
-			msn = msn * (double)(vfo[0].freq) / SI_XTAL_FREQ;
-			vfo[0].msn = msn;
-			
-			vfo[0].phase = PH090;
-			
-			si_setmsn(0);
-			si_setmsi(0);
-		}
-		vfo[0].flag = 0;
+		vfo[i].msn = (double)fvco / SI_XTAL_FREQ;							// Calculate required MSN
+		si_setmsn(i);														// Set registers
 	}
-	if (vfo[1].flag)
+	else
 	{
-		msn = (double)(vfo[1].msi); 										// Re-calculate MSN
-		msn = msn * (double)(vfo[1].ri);
-		msn = msn * (double)(vfo[1].freq) / SI_XTAL_FREQ;
+		// Pre-scale Ri, stretch down Ri=1 range to 3MHz
+		// Otherwise use just 32 and 128
+		vfo[i].ri  = (freq<1000000UL)?128:((freq<3000000UL)?32 : 1);
 		
-		if ((msn>=SI_MSN_LO)&&(msn<SI_MSN_HI))								// Check MSN range
-		{
-			vfo[1].msn = msn;
-			si_setmsn(1);
-		}
-		else
-		{
-			// Pre-scale Ri, stretch down Ri=1 range to 3MHz
-			// Otherwise use just 32 and 128
-			if (vfo[1].freq>3000000)
-				vfo[1].ri  = 1;
-			else if (vfo[1].freq>1000000)
-				vfo[1].ri  = 32;
-			else
-				vfo[1].ri  = 128;
-			
-			// Set MSi
-			if ((vfo[1].freq >= 3000000)&&(vfo[1].freq < 6000000))			// Handle Low end of Ri=1 range
-				vfo[1].msi = (uint8_t)126;									// Maximum MSi on Fvco=(4x126)MHz
-			else															// Or calculate MSi on Fvco=750MHz
-				vfo[1].msi = (uint8_t)(750000000UL / (vfo[1].freq * vfo[1].ri)) & 0x000000fe;
+		// Set MSi
+		if (freq < 6000000UL)												// Handle Low end of Ri=1 range
+			vfo[i].msi = (uint8_t)126;										// Maximum MSi on Fvco=(4x126)MHz
+		else																// Or calculate MSi on Fvco=750MHz
+			vfo[i].msi = (uint8_t)((700000000UL / (freq * vfo[i].ri)) & 0x000000fe);
 
-			msn = (double)(vfo[1].msi); 									// Re-calculate MSN
-			msn = msn * (double)(vfo[1].ri);
-			msn = msn * (double)(vfo[1].freq) / SI_XTAL_FREQ;
-			vfo[1].msn = msn;
-			
-			si_setmsn(1);
-			si_setmsi(1);
-		}
-		vfo[1].flag = 0;
+		msn = (double)(vfo[i].msi); 										// Re-calculate MSN
+		msn = msn * (double)(vfo[i].ri);
+		msn = msn * (double)(vfo[i].freq) / SI_XTAL_FREQ;
+		vfo[i].msn = msn;
+		
+		vfo[i].phase = (i==1)?PH000:PH090;									// Hard coded phase
+		
+		si_setmsn(i);
+		si_setmsi(i);
 	}
+	
+	vfo[i].freq = freq;														// Adopt new freq
 }
 
 
@@ -497,14 +468,12 @@ void si_init(void)
 			
 	// Initialize VFO values
 	vfo[0].freq  = 7074000;
-	vfo[0].flag  = 0;
 	vfo[0].phase = PH090;
 	vfo[0].ri    = 1;
 	vfo[0].msi   = 106;
 	vfo[0].msn   = ((double)vfo[0].freq*vfo[0].msi)/(double)SI_XTAL_FREQ;
 	
 	vfo[1].freq  = 10000000;
-	vfo[1].flag  = 0;
 	vfo[1].phase = PH000;
 	vfo[1].ri    = 1;
 	vfo[1].msi   = 76;

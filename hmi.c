@@ -147,20 +147,51 @@ bool ptt_active;															// Resulting state
 #define MAX(x, y)        ((x)>(y)?(x):(y))  // Get max value
 #endif
 
+
 /*
- * HMI State Machine,
- * Handle event according to current state
- * Code needs to be optimized
+ * GPIO IRQ callback routine
+ * Sets the detected event and invokes the HMI state machine
  */
-void hmi_handler(uint8_t event)
+void hmi_callback(uint gpio, uint32_t events)
 {
-	/* Special case for TUNE state */
+	uint8_t evt=HMI_E_NOEVENT;
+
+	// Decide what the event was
+	switch (gpio)
+	{
+	case GP_ENC_A:															// Encoder
+		if (events&GPIO_IRQ_EDGE_FALL)
+			evt = gpio_get(GP_ENC_B)?HMI_E_INCREMENT:HMI_E_DECREMENT;
+		break;
+	case GP_AUX_0:															// Enter
+		if (events&GPIO_IRQ_EDGE_FALL)
+			evt = HMI_E_ENTER;
+		break;
+	case GP_AUX_1:															// Escape
+		if (events&GPIO_IRQ_EDGE_FALL)
+			evt = HMI_E_ESCAPE;
+		break;
+	case GP_AUX_2:															// Previous
+		if (events&GPIO_IRQ_EDGE_FALL)
+			evt = HMI_E_LEFT;
+		break;
+	case GP_AUX_3:															// Next
+		if (events&GPIO_IRQ_EDGE_FALL)
+			evt = HMI_E_RIGHT;
+		break;
+	default:																// Stray...
+		return;
+	}
+	
+	/** HMI State Machine **/
+
+	// Special case for TUNE state
 	if (hmi_state == HMI_S_TUNE)
 	{
-		switch (event)
+		switch (evt)
 		{
 		case HMI_E_ENTER:													// Commit current value
-			si_setfreq(0, HMI_MULFREQ*(hmi_freq-FC_OFFSET));				// Commit frequency
+			// To be defined action
 			break;
 		case HMI_E_ESCAPE:													// Enter submenus
 			hmi_sub[hmi_state] = hmi_option;								// Store selection (i.e. digit)
@@ -185,8 +216,8 @@ void hmi_handler(uint8_t event)
 		return;																// Early bail-out
 	}
 	
-	/* Actions for other states */
-	switch (event)
+	// Actions for other states
+	switch (evt)
 	{
 	case HMI_E_ENTER:
 		hmi_sub[hmi_state] = hmi_option;									// Store value for selected option	
@@ -213,102 +244,10 @@ void hmi_handler(uint8_t event)
 	}	
 }
 
-/*
- * GPIO IRQ callback routine
- * Sets the detected event and invokes the HMI state machine
- */
-void hmi_callback(uint gpio, uint32_t events)
-{
-	uint8_t evt=HMI_E_NOEVENT;
-
-	switch (gpio)
-	{
-	case GP_ENC_A:															// Encoder
-		if (events&GPIO_IRQ_EDGE_FALL)
-			evt = gpio_get(GP_ENC_B)?HMI_E_INCREMENT:HMI_E_DECREMENT;
-		break;
-	case GP_AUX_0:															// Enter
-		if (events&GPIO_IRQ_EDGE_FALL)
-			evt = HMI_E_ENTER;
-		break;
-	case GP_AUX_1:															// Escape
-		if (events&GPIO_IRQ_EDGE_FALL)
-			evt = HMI_E_ESCAPE;
-		break;
-	case GP_AUX_2:															// Previous
-		if (events&GPIO_IRQ_EDGE_FALL)
-			evt = HMI_E_LEFT;
-		break;
-	case GP_AUX_3:															// Next
-		if (events&GPIO_IRQ_EDGE_FALL)
-			evt = HMI_E_RIGHT;
-		break;
-	default:
-		return;
-	}
-	
-	hmi_handler(evt);														// Invoke state machine
-}
 
 /*
- * Initialize the User interface
- */
-void hmi_init(void)
-{
-	/*
-	 * Notes on using GPIO interrupts: 
-	 * The callback handles interrupts for all GPIOs with IRQ enabled.
-	 * Level interrupts don't seem to work properly.
-	 * For debouncing, the GPIO pins should be pulled-up and connected to gnd with 100nF.
-	 * PTT has separate debouncing logic
-	 */
-	 
-	// Init input GPIOs
-	gpio_init_mask(GP_MASK_IN);
-	
-	// Enable pull-ups
-	gpio_pull_up(GP_ENC_A);
-	gpio_pull_up(GP_ENC_B);
-	gpio_pull_up(GP_AUX_0);
-	gpio_pull_up(GP_AUX_1);
-	gpio_pull_up(GP_AUX_2);
-	gpio_pull_up(GP_AUX_3);
-	gpio_pull_up(GP_PTT);
-	gpio_set_oeover(GP_PTT, GPIO_OVERRIDE_HIGH);							// Enable output on PTT GPIO; bidirectional
-	
-	// Enable interrupt on level low
-	gpio_set_irq_enabled(GP_ENC_A, GPIO_IRQ_EDGE_ALL, true);
-	gpio_set_irq_enabled(GP_AUX_0, GPIO_IRQ_EDGE_ALL, true);
-	gpio_set_irq_enabled(GP_AUX_1, GPIO_IRQ_EDGE_ALL, true);
-	gpio_set_irq_enabled(GP_AUX_2, GPIO_IRQ_EDGE_ALL, true);
-	gpio_set_irq_enabled(GP_AUX_3, GPIO_IRQ_EDGE_ALL, true);
-	gpio_set_irq_enabled(GP_PTT, GPIO_IRQ_EDGE_ALL, false);
-
-	// Set callback, one for all GPIO, not sure about correctness!
-	gpio_set_irq_enabled_with_callback(GP_ENC_A, GPIO_IRQ_EDGE_ALL, true, hmi_callback);
-		
-	// Initialize LCD and set VFO
-	hmi_state = HMI_S_TUNE;
-	hmi_option = 4;															// Active kHz digit
-	hmi_freq = 7074000UL;													// Initial frequency
-
-	si_setfreq(0, HMI_MULFREQ*(hmi_freq-FC_OFFSET));						// Set freq to 7074 kHz (depends on mixer type)
-	si_setphase(0, 1);														// Set phase to 90deg (depends on mixer type)
-	
-	ptt_state  = PTT_DEBOUNCE;
-	ptt_active = false;
-	
-	dsp_setmode(hmi_sub[HMI_S_MODE]);
-	dsp_setvox(hmi_sub[HMI_S_VOX]);
-	dsp_setagc(hmi_sub[HMI_S_AGC]);	
-	relay_setattn(hmi_pre[hmi_sub[HMI_S_PRE]]);
-	relay_setband(hmi_bpf[hmi_sub[HMI_S_BPF]]);
-	hmi_update = false;
-}
-
-/*
- * Redraw the display, representing current state
- * This function is called regularly from the main loop.
+ * Redraw the 16x2 LCD display, representing current state
+ * This function is invoked regularly from the main loop.
  */
 void hmi_evaluate(void)
 {
@@ -377,9 +316,9 @@ void hmi_evaluate(void)
 
 
 	/* Set parameters corresponding to latest entered option value */
-
-	// Frequency might have been changed in hmi_handler, so set anyway
-	si_setfreq(0, HMI_MULFREQ*(hmi_freq-FC_OFFSET));
+	
+	// See if VFO needs update
+	si_evaluate(0, hmi_freq);
 	
 	// Check bandfilter setting (thanks Alex)
 	if      (hmi_freq < 2500000UL)	band = REL_LPF2;
@@ -405,5 +344,62 @@ void hmi_evaluate(void)
 		relay_setattn(hmi_pre[hmi_sub[HMI_S_PRE]]);
 		hmi_update = false;
 	}
+}
+
+
+/*
+ * Initialize the User interface
+ */
+void hmi_init(void)
+{
+	/*
+	 * Notes on using GPIO interrupts: 
+	 * The callback handles interrupts for all GPIOs with IRQ enabled.
+	 * Level interrupts don't seem to work properly.
+	 * For debouncing, the GPIO pins should be pulled-up and connected to gnd with 100nF.
+	 * PTT has separate debouncing logic
+	 */
+	 
+	// Init input GPIOs
+	gpio_init_mask(GP_MASK_IN);
+	
+	// Enable pull-ups
+	gpio_pull_up(GP_ENC_A);
+	gpio_pull_up(GP_ENC_B);
+	gpio_pull_up(GP_AUX_0);
+	gpio_pull_up(GP_AUX_1);
+	gpio_pull_up(GP_AUX_2);
+	gpio_pull_up(GP_AUX_3);
+	gpio_pull_up(GP_PTT);
+	gpio_set_oeover(GP_PTT, GPIO_OVERRIDE_HIGH);							// Enable output on PTT GPIO; bidirectional
+	
+	// Enable interrupt on level low
+	gpio_set_irq_enabled(GP_ENC_A, GPIO_IRQ_EDGE_ALL, true);
+	gpio_set_irq_enabled(GP_AUX_0, GPIO_IRQ_EDGE_ALL, true);
+	gpio_set_irq_enabled(GP_AUX_1, GPIO_IRQ_EDGE_ALL, true);
+	gpio_set_irq_enabled(GP_AUX_2, GPIO_IRQ_EDGE_ALL, true);
+	gpio_set_irq_enabled(GP_AUX_3, GPIO_IRQ_EDGE_ALL, true);
+	gpio_set_irq_enabled(GP_PTT, GPIO_IRQ_EDGE_ALL, false);
+
+	// Set callback, one for all GPIO, not sure about correctness!
+	gpio_set_irq_enabled_with_callback(GP_ENC_A, GPIO_IRQ_EDGE_ALL, true, hmi_callback);
+		
+	// Initialize LCD and set VFO
+	hmi_state = HMI_S_TUNE;
+	hmi_option = 4;															// Active kHz digit
+	hmi_freq = 7074000UL;													// Initial frequency
+
+	si_setphase(0, 1);														// Set phase to 90deg (depends on mixer type)
+	si_evaluate(0, HMI_MULFREQ*(hmi_freq-FC_OFFSET));						// Set freq to 7074 kHz (depends on mixer type)
+	
+	ptt_state  = PTT_DEBOUNCE;
+	ptt_active = false;
+	
+	dsp_setmode(hmi_sub[HMI_S_MODE]);
+	dsp_setvox(hmi_sub[HMI_S_VOX]);
+	dsp_setagc(hmi_sub[HMI_S_AGC]);	
+	relay_setattn(hmi_pre[hmi_sub[HMI_S_PRE]]);
+	relay_setband(hmi_bpf[hmi_sub[HMI_S_BPF]]);
+	hmi_update = false;
 }
 

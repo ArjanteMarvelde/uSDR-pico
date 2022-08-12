@@ -86,6 +86,7 @@ int main()
 	 * i2c0 is used for the si5351 interface
 	 * i2c1 is used for the LCD and all other interfaces
 	 * if the display cannot keep up, try lowering the i2c1 frequency
+	 * Do not invoke i2c using functions from interrupt handlers!
 	 */
 	i2c_init(i2c0, 400000);													// i2c0 initialisation at 400Khz
 	gpio_set_function(I2C0_SDA, GPIO_FUNC_I2C);
@@ -112,9 +113,8 @@ int main()
 	while (1) 										
 	{
 		sem_acquire_blocking(&loop_sem);									// Wait until timer callback releases sem
+		hmi_evaluate();														// Refresh HMI (and VFO, BPF, etc)
 		mon_evaluate();														// Check monitor input
-		si_evaluate();														// Refresh VFO settings
-		hmi_evaluate();														// Refresh HMI
 	}
 
     return 0;

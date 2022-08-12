@@ -87,7 +87,7 @@ void mon_si(void)
 /* 
  * Dumps the VFO registers 
  */
-extern vfo_t vfo[2];
+vfo_t m_vfo;
 void mon_vfo(void)
 {
 	int i;
@@ -96,11 +96,12 @@ void mon_vfo(void)
 		i = atoi(argv[1]);
 	if ((i<0)||(i>1)) return;
 
-	printf("Frequency: %lu\n", vfo[i].freq);
-	printf("Phase    : %u\n", (int)(vfo[i].phase));
-	printf("Ri       : %lu\n", (int)(vfo[i].ri));
-	printf("MSi      : %lu\n", (int)(vfo[i].msi));
-	printf("MSN      : %g\n\n", vfo[i].msn);
+	si_getvfo(i, &m_vfo);														// Get local copy
+	printf("Frequency: %lu\n", m_vfo.freq);
+	printf("Phase    : %u\n", (int)(m_vfo.phase));
+	printf("Ri       : %lu\n", (int)(m_vfo.ri));
+	printf("MSi      : %lu\n", (int)(m_vfo.msi));
+	printf("MSN      : %g\n\n", m_vfo.msn);
 }
 
 
