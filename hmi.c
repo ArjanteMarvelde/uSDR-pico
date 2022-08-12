@@ -318,7 +318,7 @@ void hmi_evaluate(void)
 	/* Set parameters corresponding to latest entered option value */
 	
 	// See if VFO needs update
-	si_evaluate(0, hmi_freq);
+	si_evaluate(0, HMI_MULFREQ*(hmi_freq-FC_OFFSET));
 	
 	// Check bandfilter setting (thanks Alex)
 	if      (hmi_freq < 2500000UL)	band = REL_LPF2;
