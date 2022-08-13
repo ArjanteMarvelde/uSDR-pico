@@ -22,6 +22,7 @@
 #include "hardware/timer.h"
 #include "hardware/clocks.h"
 
+#include "uSDR.h"
 #include "hmi.h"
 #include "lcd.h"
 #include "dsp.h"
@@ -30,15 +31,30 @@
 #include "relay.h"
 
 
-#define I2C0_SDA	16
-#define I2C0_SCL	17
-#define I2C1_SDA	18
-#define I2C1_SCL	19
+
+/*
+ * Wrappers around i2c_write_blocking() and i2c_read_blocking()
+ * The SDK functions return too soon, potentially causing overlapping calls
+ */
+
+int i2c_put_data(i2c_inst_t *i2c, uint8_t addr, const uint8_t *src, size_t len, bool nostop)
+{
+	int r = i2c_write_blocking(i2c, addr, src, len, nostop);
+	sleep_us(I2C_LINGER_US);
+	return(r);
+}
+
+int i2c_get_data(i2c_inst_t *i2c, uint8_t addr, uint8_t *dst, size_t len, bool nostop)
+{
+	int r = i2c_read_blocking(i2c, addr, dst, len, nostop);
+	sleep_us(I2C_LINGER_US);
+	return(r);
+}
+
 
 /* 
  * LED TIMER definition and callback routine
  */
-#define LED_MS		1000
 struct repeating_timer led_timer;
 bool led_callback(struct repeating_timer *t) 
 {
@@ -49,11 +65,11 @@ bool led_callback(struct repeating_timer *t)
 	return true;
 }
 
+
 /*
  * Scheduler callback function.
  * This executes every LOOP_MS.
  */
-#define LOOP_MS		100
 semaphore_t loop_sem;
 struct repeating_timer loop_timer;
 bool loop_callback(struct repeating_timer *t)
@@ -66,6 +82,7 @@ bool loop_callback(struct repeating_timer *t)
 int main()
 {
 	/* 
+	 * Main loop rnning on Core 0
 	 * Optional: increase core voltage (normally 1.1V)
 	 * Optional: overclock the CPU to 250MHz  (normally 125MHz)
 	 * Note that clk_peri (e.g. I2C) is derived from the SYS PLL

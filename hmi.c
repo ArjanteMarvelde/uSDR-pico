@@ -29,10 +29,11 @@
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
-#include "hardware/i2c.h"
 #include "hardware/timer.h"
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
+
+#include "uSDR.h"
 #include "lcd.h"
 #include "hmi.h"
 #include "dsp.h"
@@ -40,15 +41,8 @@
 #include "relay.h"
 
 /*
- * GPIO assignments
+ * GPIO masks
  */
-#define GP_ENC_A	2
-#define GP_ENC_B	3
-#define GP_AUX_0	6								// Enter, Confirm
-#define GP_AUX_1	7								// Escape, Cancel
-#define GP_AUX_2	8								// Left move
-#define GP_AUX_3	9								// Right move
-#define GP_PTT		15
 #define GP_MASK_IN	((1<<GP_ENC_A)|(1<<GP_ENC_B)|(1<<GP_AUX_0)|(1<<GP_AUX_1)|(1<<GP_AUX_2)|(1<<GP_AUX_3)|(1<<GP_PTT))
 #define GP_MASK_PTT	(1<<GP_PTT)
 
@@ -340,7 +334,6 @@ void hmi_evaluate(void)
 		dsp_setvox(hmi_sub[HMI_S_VOX]);
 		dsp_setagc(hmi_sub[HMI_S_AGC]);	
 		relay_setband(hmi_bpf[hmi_sub[HMI_S_BPF]]);
-		sleep_ms(1);														// I2C doesn't work without...
 		relay_setattn(hmi_pre[hmi_sub[HMI_S_PRE]]);
 		hmi_update = false;
 	}

@@ -13,10 +13,6 @@
  *
  */
 
-#define DSP_FFT			1
-
-
-
 
 /* 
  * Callback timeout is TIM_US, value in usec

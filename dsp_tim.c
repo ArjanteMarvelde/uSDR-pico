@@ -28,6 +28,7 @@
  *
  */
 
+#include "uSDR.h"
 
 /* 
  * Low pass FIR filters Fc=3, 7 and 15 kHz (see http://t-filter.engineerjs.com/)

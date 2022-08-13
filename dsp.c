@@ -24,11 +24,11 @@
 #include "hardware/timer.h"
 #include "hardware/clocks.h"
 
+#include "uSDR.h"
 #include "dsp.h"
 #include "hmi.h"
 #include "fix_fft.h"
 
-#define GP_PTT				15												// PTT pin 20 (GPIO 15)
 
 volatile bool     tx_enabled;												// TX branch active
 volatile uint32_t dsp_overrun;												// Overrun counter
@@ -354,14 +354,14 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 	if (tx_enabled)
 	{								
 		A_buf[dsp_active][dsp_tick] = (int16_t)(tx_agc*adc_result[2]);
-		pwm_set_gpio_level(21, I_buf[dsp_active][dsp_tick] + DAC_BIAS);		// Output I to DAC
-		pwm_set_gpio_level(20, Q_buf[dsp_active][dsp_tick] + DAC_BIAS);		// Output Q to DAC
+		pwm_set_gpio_level(DAC_I, I_buf[dsp_active][dsp_tick] + DAC_BIAS);	// Output I to DAC
+		pwm_set_gpio_level(DAC_Q, Q_buf[dsp_active][dsp_tick] + DAC_BIAS);	// Output Q to DAC
 	}
 	else
 	{
 		I_buf[dsp_active][dsp_tick] = (int16_t)(rx_agc*adc_result[1]);
 		Q_buf[dsp_active][dsp_tick] = (int16_t)(rx_agc*adc_result[0]);
-		pwm_set_gpio_level(22, A_buf[dsp_active][dsp_tick] + DAC_BIAS);		// Output A to DAC
+		pwm_set_gpio_level(DAC_A, A_buf[dsp_active][dsp_tick] + DAC_BIAS);	// Output A to DAC
 	}
 	
 	// When sample buffer is full, move pointer to next and signal the DSP loop
@@ -378,12 +378,12 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 	if (tx_enabled)
 	{
 		a_sample = tx_agc * adc_result[2];									// Store A for DSP use
-		pwm_set_gpio_level(21, i_sample);									// Output I to DAC
-		pwm_set_gpio_level(20, q_sample);									// Output Q to DAC
+		pwm_set_gpio_level(DAC_I, i_sample);								// Output I to DAC
+		pwm_set_gpio_level(DAC_Q, q_sample);								// Output Q to DAC
 	}
 	else
 	{							
-		pwm_set_gpio_level(22, a_sample);									// Output Q to DAC
+		pwm_set_gpio_level(DAC_A, a_sample);								// Output Q to DAC
 		q_sample = rx_agc * adc_result[0];									// Store Q for DSP use
 		i_sample = rx_agc * adc_result[1];									// Store I for DSP use
 	}
@@ -413,15 +413,15 @@ void __not_in_flash_func(dsp_loop)()
 	 * default mode is free running, 
 	 * A and B pins are output 
 	 */
-	gpio_set_function(20, GPIO_FUNC_PWM);									// GP20 is PWM for Q DAC (Slice 2, Channel A)
-	gpio_set_function(21, GPIO_FUNC_PWM);									// GP21 is PWM for I DAC (Slice 2, Channel B)
-	dac_iq = pwm_gpio_to_slice_num(20);										// Get PWM slice for GP20 (Same for GP21)
+	gpio_set_function(DAC_Q, GPIO_FUNC_PWM);								// GP20 is PWM for Q DAC (Slice 2, Channel A)
+	gpio_set_function(DAC_I, GPIO_FUNC_PWM);								// GP21 is PWM for I DAC (Slice 2, Channel B)
+	dac_iq = pwm_gpio_to_slice_num(DAC_Q);									// Get PWM slice for GP20 (Same for GP21)
 	pwm_set_clkdiv_int_frac (dac_iq, 1, 0);									// clock divide by 1: full system clock
 	pwm_set_wrap(dac_iq, DAC_RANGE-1);										// Set cycle length; nr of counts until wrap, i.e. 125/DAC_RANGE MHz
 	pwm_set_enabled(dac_iq, true); 											// Set the PWM running
 	
-	gpio_set_function(22, GPIO_FUNC_PWM);									// GP22 is PWM for Audio DAC (Slice 3, Channel A)
-	dac_audio = pwm_gpio_to_slice_num(22);									// Find PWM slice for GP22
+	gpio_set_function(DAC_A, GPIO_FUNC_PWM);								// GP22 is PWM for Audio DAC (Slice 3, Channel A)
+	dac_audio = pwm_gpio_to_slice_num(DAC_A);								// Find PWM slice for GP22
 	pwm_set_clkdiv_int_frac (dac_audio, 1, 0);								// clock divide by 1: full system clock
 	pwm_set_wrap(dac_audio, DAC_RANGE-1);									// Set cycle length; nr of counts until wrap, i.e. 125/DAC_RANGE MHz
 	pwm_set_enabled(dac_audio, true); 										// Set the PWM running
@@ -431,9 +431,9 @@ void __not_in_flash_func(dsp_loop)()
 	 * samples are stored in array through IRQ callback
 	 */
 	adc_init();																// Initialize ADC to known state
-	adc_gpio_init(26);														// GP26 is ADC 0 for Q channel
-	adc_gpio_init(27);														// GP27 is ADC 1 for I channel
-	adc_gpio_init(28);														// GP28 is ADC 2 for Audio channel
+	adc_gpio_init(ADC_Q);													// ADC GPIO for Q channel
+	adc_gpio_init(ADC_I);													// ADC GPIO for I channel
+	adc_gpio_init(ADC_A);													// ADC GPIO for Audio channel
 	adc_set_round_robin(0x01+0x02+0x04);									// Sequence ADC 0-1-2 (GP 26, 27, 28) free running
 	adc_select_input(0);													// Start with ADC0
 	adc_fifo_setup(true,true,3,false,false);								// IRQ result, DMA req, fifo thr=3: xfer per 3 x 16 bits
@@ -506,7 +506,7 @@ void __not_in_flash_func(dsp_loop)()
 			rx();															// Do RX signal processing
 		}
 		
-/////// This is a trap, ptt remains active after once asserted: to be checked!
+		/** !!! This is a trap, ptt remains active after once asserted: TO BE CHECKED! **/
 		tx_enabled = vox_active || ptt_active;								// Check RX or TX	
 		
 #if DSP_FFT == 1
@@ -527,63 +527,4 @@ void dsp_init()
 
 
 
-/* DMA EXAMPLE, should convert to chained DMA to reload after 3 words
-    // Init GPIO for analogue use: hi-Z, no pulls, disable digital input buffer.
-    adc_gpio_init(26 + CAPTURE_CHANNEL);
 
-    adc_init();
-    adc_select_input(CAPTURE_CHANNEL);
-    adc_fifo_setup(
-        true,    // Write each completed conversion to the sample FIFO
-        true,    // Enable DMA data request (DREQ)
-        1,       // DREQ (and IRQ) asserted when at least 1 sample present
-        false,   // We won't see the ERR bit because of 8 bit reads; disable.
-        true     // Shift each sample to 8 bits when pushing to FIFO
-    );
-
-    // Divisor of 0 -> full speed. Free-running capture with the divider is
-    // equivalent to pressing the ADC_CS_START_ONCE button once per `div + 1`
-    // cycles (div not necessarily an integer). Each conversion takes 96
-    // cycles, so in general you want a divider of 0 (hold down the button
-    // continuously) or > 95 (take samples less frequently than 96 cycle
-    // intervals). This is all timed by the 48 MHz ADC clock.
-    adc_set_clkdiv(0);
-
-    printf("Arming DMA\n");
-    sleep_ms(1000);
-    // Set up the DMA to start transferring data as soon as it appears in FIFO
-    uint dma_chan = dma_claim_unused_channel(true);
-    dma_channel_config cfg = dma_channel_get_default_config(dma_chan);
-
-    // Reading from constant address, writing to incrementing byte addresses
-    channel_config_set_transfer_data_size(&cfg, DMA_SIZE_8);
-    channel_config_set_read_increment(&cfg, false);
-    channel_config_set_write_increment(&cfg, true);
-
-    // Pace transfers based on availability of ADC samples
-    channel_config_set_dreq(&cfg, DREQ_ADC);
-
-    dma_channel_configure(dma_chan, &cfg,
-        capture_buf,    // dst
-        &adc_hw->fifo,  // src
-        CAPTURE_DEPTH,  // transfer count
-        true            // start immediately
-    );
-
-    printf("Starting capture\n");
-    adc_run(true);
-
-    // Once DMA finishes, stop any new conversions from starting, and clean up
-    // the FIFO in case the ADC was still mid-conversion.
-    dma_channel_wait_for_finish_blocking(dma_chan);
-    printf("Capture finished\n");
-    adc_run(false);
-    adc_fifo_drain();
-
-    // Print samples to stdout so you can display them in pyplot, excel, matlab
-    for (int i = 0; i < CAPTURE_DEPTH; ++i) {
-        printf("%-3d, ", capture_buf[i]);
-        if (i % 10 == 9)
-            printf("\n");
-    }
-*/

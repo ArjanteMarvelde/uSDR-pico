@@ -4,11 +4,10 @@
  * Created: Mar 2021
  * Author: Arjan te Marvelde
  * 
- * --> Set I2C address below!
- * --> Select LCD_TYPE below!
- * 
- * Driver for 16x2 HD44780 based LCD displays.
- * There exist many different types, so you may need to adapt some of the code.
+ * => LCD Address and Type are chosen in uSDR.h!
+ *
+ * This file contains the driver for 16x2 HD44780 based LCD displays.
+ * Many different types exist, so you may need to adapt some of the code.
  * Most notably the startup sequence and the way bytes are sent over the I2C interface. 
  * But also the register mappings as described below.
  *
@@ -46,18 +45,9 @@
 #include "hardware/i2c.h"
 #include "hardware/timer.h"
 #include "hardware/clocks.h"
+
+#include "uSDR.h"
 #include "lcd.h"
-
-/** User selectable definitions **/
-// Set I2C address for your device
-#define I2C_LCD				0x3E											// Grove: 0x3E, 8574 backpack: 0x20..0x27
-
-// Select LCD type to match your device, 
-// or define a new one when code changes are needed.
-#define LCD_1804			0												// Seeed / Grove
-#define LCD_8574_ADA		1												// Adafruit I2C backpack
-#define LCD_8574_GEN		2												// Generic I2C backpack
-#define LCD_TYPE			LCD_1804
 
 
 /** Generic HD44780 interface **/
@@ -100,19 +90,20 @@
 #define LCD_5x8DOTS 		0x00
 
 /** I2C interface specific mappings **/
-// 1804-based specific bitmasks
+// 1804-based specific bitmasks (Seeed/Grove)
 #define LCD_COMMAND			0x80
 #define LCD_DATA			0x40
 #define LCD_INIT_1804		(LCD_FUNCTIONSET | LCD_8BITMODE | LCD_2LINE | LCD_5x8DOTS)
 
 
-// 8574-based specific bitmasks
+// 8574-based specific bitmasks (Adafruit)
 #define LCD_COMMAND_ADA		0x00
 #define LCD_DATA_ADA		0x02
 #define LCD_BACKLIGHT_ADA	0x80
 #define LCD_ENABLE_ADA		0x04
 #define LCD_INIT_ADA		(LCD_FUNCTIONSET | LCD_4BITMODE | LCD_2LINE | LCD_5x8DOTS)
 
+// 8574-based specific bitmasks (Generic)
 #define LCD_COMMAND_GEN		0x00
 #define LCD_DATA_GEN		0x01
 #define LCD_ENABLE_GEN		0x04
@@ -130,9 +121,6 @@
 #define LCD_INIT_FUNCTION 	LCD_INIT_GEN
 #endif
 
-
-/** Other definitions **/
-#define LCD_DELAY			100												// Delay for regular write
 
 
 /*
@@ -164,8 +152,7 @@ void lcd_sendbyte(uint8_t command, uint8_t data)
 	// Write command/data flag and data byte
 	txdata[0] = (command?LCD_COMMAND:LCD_DATA); 
 	txdata[1] = data;
-	i2c_write_blocking(i2c1, I2C_LCD, txdata, 2, false);
-	sleep_us(LCD_DELAY);
+	i2c_put_data(i2c1, I2C_LCD, txdata, 2, false);
 #endif
 		
 #if LCD_TYPE == LCD_8574_ADA
@@ -175,15 +162,15 @@ void lcd_sendbyte(uint8_t command, uint8_t data)
 
 	// Write high nibble
 	high |= LCD_ENABLE_ADA;
-	i2c_write_blocking(i2c1, I2C_LCD, &high, 1, false);	sleep_us(LCD_DELAY);
+	i2c_put_data(i2c1, I2C_LCD, &high, 1, false);
 	high &= ~LCD_ENABLE_ADA;
-	i2c_write_blocking(i2c1, I2C_LCD, &high, 1, false);	sleep_us(LCD_DELAY);
+	i2c_put_data(i2c1, I2C_LCD, &high, 1, false);
 	
 	// Write low nibble
 	low |= LCD_ENABLE_ADA;
-	i2c_write_blocking(i2c1, I2C_LCD, &low, 1, false); sleep_us(LCD_DELAY);
+	i2c_put_data(i2c1, I2C_LCD, &low, 1, false);
 	low &= ~LCD_ENABLE_ADA;
-	i2c_write_blocking(i2c1, I2C_LCD, &low, 1, false); sleep_us(LCD_DELAY);
+	i2c_put_data(i2c1, I2C_LCD, &low, 1, false);
 #endif
 
 #if LCD_TYPE == LCD_8574_GEN
@@ -193,15 +180,15 @@ void lcd_sendbyte(uint8_t command, uint8_t data)
 
 	// Write high nibble
 	high |= LCD_ENABLE_GEN;
-	i2c_write_blocking(i2c1, I2C_LCD, &high, 1, false);	sleep_us(LCD_DELAY);
+	i2c_put_data(i2c1, I2C_LCD, &high, 1, false);
 	high &= ~LCD_ENABLE_GEN;
-	i2c_write_blocking(i2c1, I2C_LCD, &high, 1, false);	sleep_us(LCD_DELAY);
+	i2c_put_data(i2c1, I2C_LCD, &high, 1, false);
 	
 	// Write low nibble
 	low |= LCD_ENABLE_GEN;
-	i2c_write_blocking(i2c1, I2C_LCD, &low, 1, false); sleep_us(LCD_DELAY);
+	i2c_put_data(i2c1, I2C_LCD, &low, 1, false);
 	low &= ~LCD_ENABLE_GEN;
-	i2c_write_blocking(i2c1, I2C_LCD, &low, 1, false); sleep_us(LCD_DELAY);
+	i2c_put_data(i2c1, I2C_LCD, &low, 1, false);
 #endif
 }
 

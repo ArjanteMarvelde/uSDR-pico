@@ -149,9 +149,10 @@ Control Si5351 (see AN619):
 #include "hardware/i2c.h"
 #include "hardware/timer.h"
 #include "hardware/clocks.h"
+
+#include "uSDR.h"
 #include "si5351.h"
 
-#define I2C_VFO		0x60													// I2C address
 
 // SI5351 register address definitions
 #define SI_CLK_OE		3     
@@ -234,14 +235,14 @@ void si_enable(int i, bool en)
 	if ((i<0)||(i>1)) return;												// Check VFO range
 	
 	data[0] = SI_CLK_OE;													// Read OE register
-	i2c_write_blocking(i2c0, I2C_VFO, &data[0], 1, true);
+	i2c_put_data(i2c0, I2C_VFO, &data[0], 1, true);
 	i2c_read_blocking(i2c0, I2C_VFO, &data[1], 1, false);
 
 	if (i==0)
 		data[1] = en ? data[1]&~SI_VFO0_DISABLE : data[1]|SI_VFO0_DISABLE;	// clk0 and clk1
 	else
 		data[1] = en ? data[1]&~SI_VFO1_DISABLE : data[1]|SI_VFO1_DISABLE;	// clk2
-	i2c_write_blocking(i2c0, I2C_VFO, &data[0], 2, false);
+	i2c_put_data(i2c0, I2C_VFO, &data[0], 2, false);
 }
 
 /* 
@@ -251,9 +252,9 @@ int si_getreg(uint8_t *data, uint8_t reg, uint8_t len)
 {
 	int ret;
 	
-	ret = i2c_write_blocking(i2c0, I2C_VFO, &reg, 1, true);
+	ret = i2c_put_data(i2c0, I2C_VFO, &reg, 1, true);
 	if (ret<0) printf ("I2C write error\n");
-	ret = i2c_read_blocking(i2c0, I2C_VFO, data, len, false);
+	ret = i2c_get_data(i2c0, I2C_VFO, data, len, false);
 	if (ret<0) printf ("I2C read error\n");
 	return(len);
 }
@@ -299,7 +300,7 @@ void si_setmsn(int i)
 	data[6] = ((SI_PLL_C & 0x000F0000) >> 12) | ((P2 & 0x000F0000) >> 16);
 	data[7] = (P2 & 0x0000FF00) >> 8;
 	data[8] = (P2 & 0x000000FF);
-	i2c_write_blocking(i2c0, I2C_VFO, data, 9, false);
+	i2c_put_data(i2c0, I2C_VFO, data, 9, false);
 }
 
 /*
@@ -338,59 +339,56 @@ void si_setmsi(int i)
 	data[6] = 0x00;
 	data[7] = 0x00;
 	data[8] = 0x00;
-	i2c_write_blocking(i2c0, I2C_VFO, data, 9, false);
+	i2c_put_data(i2c0, I2C_VFO, data, 9, false);
 
 	// If vfo[0] also set clk 1	and phase offset, (integer mode(?) and high drive current for low phase noise).
 	if (i==0)
 	{
 		data[0] = SI_SYNTH_MS1;												// Same data in synthesizer
-		i2c_write_blocking(i2c0, I2C_VFO, data, 9, false);
+		i2c_put_data(i2c0, I2C_VFO, data, 9, false);
 		
 		if ((vfo[0].phase==PH090)||(vfo[0].phase==PH270))					// Phase is 90 or 270 deg?
 		{
 			data[0] = SI_CLK1_PHOFF;
 			data[1] = vfo[0].msi;											// offset == MSi for 90deg
-			i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
+			i2c_put_data(i2c0, I2C_VFO, data, 2, false);
 		}
 		else																// Phase is 0 or 180 deg
 		{
 			data[0] = SI_CLK1_PHOFF;
 			data[1] = 0;													// offset == 0 for 0deg
-			i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
+			i2c_put_data(i2c0, I2C_VFO, data, 2, false);
 		}
-		sleep_us(500);
 		if ((vfo[0].phase==PH180)||(vfo[0].phase==PH270))					// Phase is 180 or 270 deg?
 		{
 			data[0] = SI_CLK0_CTL;											// set the invert flag
 			data[1] = SI_VFO0CTL;											// CLK0: nonINV
 			data[2] = SI_VFO0CTL | SI_CLK_INV;								// CLK1: INV
-			i2c_write_blocking(i2c0, I2C_VFO, data, 3, false);
+			i2c_put_data(i2c0, I2C_VFO, data, 3, false);
 		}
 		else
 		{
 			data[0] = SI_CLK0_CTL;											// set the invert flag
 			data[1] = SI_VFO0CTL;											// CLK0: nonINV
 			data[2] = SI_VFO0CTL;											// CLK1: nonINV
-			i2c_write_blocking(i2c0, I2C_VFO, data, 3, false);
+			i2c_put_data(i2c0, I2C_VFO, data, 3, false);
 		}
 
 		// Reset PLL A (use with care, this causes a click)
-		sleep_us(500);
 		data[0] = SI_PLL_RESET;
 		data[1] = SI_PLLA_RST|SI_PLLB_RST;
-		i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
+		i2c_put_data(i2c0, I2C_VFO, data, 2, false);
 	}
 	else
 	{
 		data[0] = SI_CLK2_CTL;												// set the invert flag
 		data[1] = SI_VFO1CTL;												// CLK2: nonINV
-		i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
+		i2c_put_data(i2c0, I2C_VFO, data, 2, false);
 
 		// Reset PLL B (use with care, this causes a click)
-		sleep_us(500);
 		data[0] = SI_PLL_RESET;
 		data[1] = SI_PLLA_RST|SI_PLLB_RST;
-		i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
+		i2c_put_data(i2c0, I2C_VFO, data, 2, false);
 	}		
 }
 
@@ -457,14 +455,14 @@ void si_init(void)
 	// Disable spread spectrum (startup state is undefined)	
 	data[0] = SI_SS_EN;
 	data[1] = 0x00;
-	i2c_write_blocking(i2c0, I2C_VFO, data, 2, false);
+	i2c_put_data(i2c0, I2C_VFO, data, 2, false);
 	
 	// First time init of clock control registers
 	data[0] = SI_CLK0_CTL;
 	data[1] = SI_VFO0CTL;
 	data[2] = SI_VFO0CTL;
 	data[3] = SI_VFO1CTL;
-	i2c_write_blocking(i2c0, I2C_VFO, data, 4, false);
+	i2c_put_data(i2c0, I2C_VFO, data, 4, false);
 			
 	// Initialize VFO values
 	vfo[0].freq  = 7074000;

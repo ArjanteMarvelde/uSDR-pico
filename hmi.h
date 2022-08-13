@@ -9,8 +9,6 @@
  * See hmi.c for more information 
  */
 
-#define CARRIER_OFFSET		3500
-
 extern bool ptt_active;
 
 void hmi_init(void);

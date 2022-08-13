@@ -53,7 +53,7 @@
  *
  */
 
-
+#include "uSDR.h"
 
 /*
  * FFT buffer allocation

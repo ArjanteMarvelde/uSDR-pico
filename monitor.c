@@ -14,6 +14,7 @@
 #include <string.h>
 #include "pico/stdlib.h"
 
+#include "uSDR.h"
 #include "lcd.h"
 #include "si5351.h"
 #include "dsp.h"
@@ -21,11 +22,14 @@
 #include "monitor.h"
 
 
+// Some special character ASCII codes
 #define CR			13
 #define LF			10
 #define SP			32
+
 #define CMD_LEN		80
 #define CMD_ARGS	16
+
 
 char mon_cmd[CMD_LEN+1];							// Command string buffer
 char *argv[CMD_ARGS];								// Argument pointers
