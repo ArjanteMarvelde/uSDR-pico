@@ -46,7 +46,7 @@ Start the installer
 -  Folder as proposed, Install  
 -  Tick the box: "Add path to environment variable", Finish  
 
-Note: If the installer complains, you can also add the installation folder location manually to the system path, through *System Properties* on the PC, click on Environment Variables in the advanced tab. (the path should look like "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\11.2 2022.02")  
+Note: If the installer complains, you can also add the installation folder location manually to the system path, through *System Properties* on the PC, click on Environment Variables in the advanced tab. (The variable is PICO_TOOLCHAIN_PATH and the path should look like "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\11.2 2022.02")  
   
 **-2- CMake**  
 Start the installer  
