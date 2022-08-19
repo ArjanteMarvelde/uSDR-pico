@@ -24,7 +24,7 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
  
 
 ## Installing and using the SDK for Windows: 
-For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/ndabas/pico-setup-windows). In case this does not work, follow the instructions below. I have found that the Visual Studio Code interface is hard to set up correctly, so I recommend to just use [Notepad++ to](https://notepad-plus-plus.org/downloads/) to edit the source and txt files and simply use NMake from the Developer Command Prompt to build a loadable UF2 file.  
+For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/ndabas/pico-setup-windows). In case this does not work, follow the instructions below. I have found that the Visual Studio Code interface is hard to set up correctly, so I recommend to just use [Notepad++](https://notepad-plus-plus.org/downloads/) to edit the source and txt files and simply use NMake from the Developer Command Prompt to build a loadable UF2 file.  
 
 ### Manual installation.  
 Doing it manually, first download the latest packages, in my case for Windows 10 on a 64 bit PC:  
