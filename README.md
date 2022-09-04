@@ -18,6 +18,7 @@ The Pico controls an Si5351A clock module to obtain the switching clock for the 
 The display is a standard 16x2 LCD, but with an I2C interface. The display is connected through the other I2C channel, as well as the bus expanders for controlling the various relays.
 
 ## Open issues: 
+- [ ] write FFT TX function
 - [ ] improve on TX audio quality 
 - [ ] implement better AGC 
 - [ ] improve FFT filtering  
