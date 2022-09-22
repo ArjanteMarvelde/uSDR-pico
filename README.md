@@ -1,29 +1,31 @@
 # uSDR-pico
-This Git repository contains a Micro-SDR implementation, based on a RP2040 Pi Pico. The project is highly experimental, foremost intended to investigate how the Pico HW and SDK work with an application like this. Also it is a platform to experiment with digital signal processing techniques. The repository contains the code for an experimental implementation of the control and signal processing for a QSD/QSE based transceiver. 
-Furthermore, the repository contains the electronic design of some modules that cover the mixing, filtering and RF amplification.  
+This Git repository contains a Micro-SDR implementation, based on a RP2040 Pi Pico.  
 
-The ZIP files contain a consistent package, but the latest code with all the bug fixes and some new features is in the files in the main directory.  
-Starting with the V3.00 package **uSDR-pico** contains *two signal processing engines*, selectable with a compile switch in dsp.h. The first engine is the old time domain processor, more or less as in V2.00, and the second engine is a new FFT-based processor.  
-For a more detailed description of the software and the hardware, please refer to the elaborate documentation.  
+The project is highly experimental, foremost intended to investigate how the Pico HW and SDK work with an application like this. Also, it is a platform to experiment with digital signal processing techniques. The repository contains the code for an experimental implementation of the control and signal processing for a Quadrature Sampling Detector (QSD) and - Exciter (QSE) based transceiver. 
+For completeness, the repository contains the electronic design of some modules that cover the mixing, filtering and RF amplification, as I have implemented in my prototype. See the *doc* subdirectory for full documentation.   
 
-The platform used is a Pi Pico module with an RP2040 processor. This processor has dual cores, running default at 125MHz each, and a very configurable I/O which eases the HW design. The platform can be overclocked, but some functions seem to become unstable when pushed too far.
-The software is distributed over the two cores: *core0* takes care of all user I/O and control functions, while *core1* performs all of the signal processing. The *core1* functionality consists of a TX-branch and an RX-branch, each called from a function that is synchronized by a timer every 64usec. Hence the signal processing rythm on *core1* effectively is 15.625kHz.  
+The ZIP files contain a consistent package, but the latest code with all the bug fixes and some new features is contained in the files in the main directory.  
+Starting with the V3.00 package **uSDR-pico** contains *two signal processing engines*, selectable with a compile switch in uSDR.h. The first engine is the  time domain processor, more or less as in V2.00, and the second engine is a new FFT-based frequency domain processor.  
+For a more detailed description of the software and the hardware, again refer to the elaborate documentation.  
+
+The processor platform is a Pi Pico module, with an RP2040 device. This processor has dual cores running at 125MHz each, and a very configurable I/O which eases the HW design enormously. The platform can be overclocked, but some functions seem to become unstable when pushed too far. It is one of the topics for further investigation, although performance-wise not neccessary at the moment.
+The software is distributed over the two cores: *core0* takes care of all user I/O and control functions, while *core1* performs all of the signal processing. The *core1* functionality consists of a TX-branch and an RX-branch, each invoked by a function that is synchronized by a timer every 64usec. Hence the signal processing rythm on *core1* effectively is 15.625kHz.  
 On *core1* the three ADC channels are continuously sampled at maximum speed in round-robin mode. Samples are therefore taken every 6usec for each channel, maximum jitter between I and Q channels is 2usec, which has a negligible effect in the audio domain.  
-For the time domain processing the TX and RX functions are called every timeslot, but for the frequency domain processing the samples are collected until half an FFT buffer is filled (512 samples), and hence this happens every 32msec.  
+For the time domain processing the TX and RX functions are executed within every 64usec timeslot, but for the frequency domain processing the samples are collected until half an FFT buffer is filled (512 samples), and hence this happens every 32msec (in background).  
 On *core0* the main loop takes care of user I/O, all other controls and the monitor port. There is also a LED flashing timer callback functioning as a heartbeat.
 
-The Pico controls an Si5351A clock module to obtain the switching clock for the QSE and QSD. The module outputs two synchronous square wave clocks on ch 0 and 1, whith selectable phase difference (0, 90, 180 or 270 degrees). The clock on ch2 is free to be used for other goals. The module is controlled over the **i2c0** channel.
-The display is a standard 16x2 LCD, but with an I2C interface. The display is connected through the **i2c1** channel, as well as the bus expanders for controlling the various relays.
+The Pico controls an Si5351A clock module to obtain the switching clock for the QSE and QSD. The module outputs two synchronous square wave clocks on ch 0 and 1, whith selectable phase difference (0, 90, 180 or 270 degrees). The clock on ch2 is free to be used for other goals. The module is controlled over one of the I2C channels.
+The display is a standard 16x2 LCD, but with an I2C interface. The display is connected through the other I2C channel, as well as the bus expanders for controlling the various relays.
 
 ## Open issues: 
-- [ ] implement proper AGC 
-- [x] implement RSSI and S-meter  
-- [x] improve FFT-based signal processing  
-- [x] revisit Si5351A driver  
-- [x] automatic bandfilter switching  
+- [ ] write FFT TX function
+- [ ] improve on TX audio quality 
+- [ ] implement better AGC 
+- [ ] improve FFT filtering  
+ 
 
 ## Installing and using the SDK for Windows: 
-For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/ndabas/pico-setup-windows). In case this does not work, follow the instructions below.  
+For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/ndabas/pico-setup-windows). In case this does not work, follow the instructions below. I have found that the Visual Studio Code interface is hard to set up correctly, so I recommend to just use [Notepad++](https://notepad-plus-plus.org/downloads/) to edit the source and txt files and simply use NMake from the Developer Command Prompt to build a loadable UF2 file.  
 
 ### Manual installation.  
 Doing it manually, first download the latest packages, in my case for Windows 10 on a 64 bit PC:  
@@ -45,7 +47,8 @@ Start the installer
 -  Folder as proposed, Install  
 -  Tick the box: "Add path to environment variable", Finish  
 
-If the installer complains, you can also add the folder location manually to the system path (something like "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\11.2 2022.02")  
+Note: If the installer complains, no worry: this will be done below in step **-7-**.
+You could also add the installation folder location manually to the system path, through *System Properties* on the PC, click on Environment Variables in the advanced tab. (The variable is PICO_TOOLCHAIN_PATH and the path should look like "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\11.2 2022.02")  
   
 **-2- CMake**  
 Start the installer  
