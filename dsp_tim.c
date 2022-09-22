@@ -30,6 +30,10 @@
 
 #include "uSDR.h"
 
+
+volatile int32_t q_sample, i_sample, a_sample;								// Latest processed sample values
+
+
 /* 
  * Low pass FIR filters Fc=3, 7 and 15 kHz (see http://t-filter.engineerjs.com/)
  * Settings: sample rates 62500, 31250 or 15625 Hz, stopband -40dB, passband ripple 5dB
@@ -49,30 +53,28 @@ int16_t lpf15_62[15] = { -1,  3, 12,  6,-12, -4, 40, 69, 40, -4,-12,  6, 12,  3,
 
 /* 
  * Execute RX branch signal processing
+ * max time to spend is <64us (TIM_US)
+ * The pre-processed I/Q samples are passed in i_sample and q_sample
+ * The calculated A sample is passed in a_sample
  */
 volatile int32_t i_s_raw[15], q_s_raw[15];									// Raw I/Q samples minus DC bias
-volatile uint16_t peak=0;													// Peak detector running value
-volatile int16_t agc_gain=0;	       										// AGC gain (left-shift value)
-volatile int16_t agc_accu=0;	       										// Log peak level integrator
 volatile int32_t i_s[15], q_s[15];											// Filtered I/Q samples
-volatile int32_t i2, q2;													// Squared samples
 bool __not_in_flash_func(rx)(void) 
 {
 	int32_t q_accu, i_accu;
 	int32_t qh;
 	uint16_t i;
-	int16_t k;
 	
 	/*** SAMPLING ***/
 	/* 
 	 * Shift-in I and Q raw samples 
 	 */
-	for (i=0; i<14; i++)
+	for (i=0; i<14; i++)													// Store preprocessed samples in shift registers
 	{
 		q_s_raw[i] = q_s_raw[i+1];
 		i_s_raw[i] = i_s_raw[i+1];
 	}
-	q_s_raw[14] = q_sample;													// Store decimated samples in shift registers
+	q_s_raw[14] = q_sample;
 	i_s_raw[14] = i_sample;
 	
 	
@@ -89,7 +91,7 @@ bool __not_in_flash_func(rx)(void)
 	q_accu = q_accu/256;
 	i_accu = i_accu/256;
 	
-	for (i=0; i<14; i++) 													// Shift filtered samples
+	for (i=0; i<14; i++) 													// Store filtered samples in shift registers
 	{
 		q_s[i] = q_s[i+1];
 		i_s[i] = i_s[i+1];
@@ -153,11 +155,12 @@ bool __not_in_flash_func(rx)(void)
 /** CORE1: TX branch **/
 /*
  * Execute TX branch signal processing, 
- * max time to spend is <16us, i.e. rate is 62.5 kHz
- * The audio sampling has already been done in vox()
+ * max time to spend is <64us (TIM_US)
+ * The pre-processed audio sample is passed in a_sample
+ * The calculated I and Q samples are passed in i_sample and q_sample
  */
 volatile int16_t a_s_raw[15]; 												// Raw samples, minus DC bias
-volatile int16_t a_s[15];													// Filtered and decimated samplesvolatile int16_t a_dc;														// DC level
+volatile int16_t a_s[15];													// Filtered and decimated samplesvolatile int16_t 
 bool __not_in_flash_func(tx)(void) 
 {
 	int32_t a_accu, q_accu;

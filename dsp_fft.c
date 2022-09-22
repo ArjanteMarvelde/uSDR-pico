@@ -26,26 +26,45 @@
  * The other two are swapped with the FFT signal processing buffers.
  * Since we use complex FFT, the algorithm uses 4x buffers.
  *
- * I, Q and A buffers used as queues. RX case looks like:
+ * I, Q and A buffers are used as queues. RX case looks like:
  *
- *        +--+--+--+
- *  i --> |  |  |  |
- *        +--+--+--+
- *            \  \  \     +--+--+
- *              --------> |  |  |                      +--+--+--+
- *                        +--+--+    FFT-DSP-iFFT  --> |  |  |  | --> a
- *              --------> |  |  |                      +--+--+--+
+ *        +--+--+--+                                   +--+--+--+
+ *  i --> |  |  |  |                                   |  |  |  | --> a
+ *        +--+--+--+                                   +--+--+--+
+ *            \  \  \     +--+--+                     /  /
+ *             ---------> |  |  |                 -------
+ *                        +--+--+    FFT-DSP-iFFT 
+ *             ---------> |  |  |                    
  *            /  /  /     +--+--+
  *        +--+--+--+
  *  q --> |  |  |  |
  *        +--+--+--+
  *
  * RX, when triggered by timer callback:
- * - The oldest real FFT buffer is moved to the output queue (check this)
  * - The oldest two I and Q buffers are copied into the FFT buffers
  * - FFT is executed
  * - Signal processing is done
  * - iFFT is executed
+ * - The oldest real FFT buffer is moved to the A output queue
+ *
+ *        +--+--+--+                                   +--+--+--+
+ *  a --> |  |  |  |                                   |  |  |  | --> i
+ *        +--+--+--+                                   +--+--+--+
+ *            \  \  \     +--+--+                     /  /
+ *              --------> |  |  |                 -------
+ *                        +--+--+    FFT-DSP-iFFT
+ *                        |  |  |                 -------
+ *                        +--+--+                     \  \
+ *                                                     +--+--+--+
+ *                                                     |  |  |  | --> q
+ *                                                     +--+--+--+
+ *
+ * TX, when triggered by timer callback:
+ * - The oldest two A buffers are copied to the real FFT buffer, the imaginary FFT buffer is nulled
+ * - FFT is executed
+ * - Signal processing is done
+ * - iFFT is executed
+ * - The oldest FFT buffers are appended to the I/Q output queues
  *
  * The bin step is the sampling frequency divided by the FFT_SIZE.
  * So for S_RATE=15625 and FFT_SIZE=1024 this step is 15625/1024=15.259 Hz
@@ -81,63 +100,68 @@ volatile uint32_t dsp_tickx  = 0;											// Load indicator DSP loop
 
 // Spectrum bins for a frequency
 #define BIN(f)			(int)(((f)*FFT_SIZE+S_RATE/2)/S_RATE)
-#define BIN_FC			  256
+#define BIN_FC			  256												// BIN_FC > BIN_3000 to avoid aliasing!
 #define BIN_100       	    7
 #define BIN_300		 	   20
 #define BIN_900		 	   59
 #define BIN_3000		  197
 
+
+
+
 /*
  * This applies a bandpass filter to XI and XQ buffers
  * lowbin and highbin edges must be between 3 and FFT_SIZE/2 - 3
+ * sign: <0 only LSB is passed
+ *       >0 only USB is passed
+ *       =0 LSB and USB are passed
  * Edge is a 7 bin raised cosine flank, i.e. 100Hz wide
  * Coefficients are: 0, 0.067, 0.25, 0.5, 0.75, 0.933, 1
- * where the edge bin is in the center of this flank
- * Note: maybe make slope less steep, e.g. 9 or 11 bins
+ *    where the edge bin is in the center of this flank
+ * Note: maybe make slope less steep, e.g. 9 or 11 bins 
  */
-inline void dsp_bandpass(int lowbin, int highbin)
+void  __not_in_flash_func(dsp_bandpass)(int lowbin, int highbin, int sign)
 {
-	int i;
+	int i, lo1, lo2, hi1, hi2;
 	
 	if ((lowbin<3)||(highbin>(FFT_SIZE/2-3))||(highbin-lowbin<6)) return;
 	
 	XI_buf[0] = 0; XQ_buf[0] = 0; 	
-	for (i=1; i<lowbin-2; i++) 
-	{ 
-		XI_buf[i] = 0; XI_buf[FFT_SIZE-i] = 0;
-		XQ_buf[i] = 0; XQ_buf[FFT_SIZE-i] = 0; 
-	}
-	for (i=highbin+3; i<FFT_SIZE-highbin-2; i++) 
-	{ 
-		XI_buf[i] = 0; 
-		XQ_buf[i] = 0; 
-	}
+	
+	// Boundaries are inclusive
+	if (sign>=0) { lo1 = lowbin-2; lo2 = highbin+2; }
+	if (sign<=0) { hi1 = FFT_SIZE-highbin-2; hi2 = FFT_SIZE-lowbin+2; }
 
-	// Note: There is not much difference between using or discarding Q bins 
-	i=lowbin-2;
+	// Null all bins excluded from filter
+	for (i=1; i<lo1; i++)          { XI_buf[i] = 0; XQ_buf[i] = 0; }
+	for (i=lo2+1; i<hi1; i++)      { XI_buf[i] = 0; XQ_buf[i] = 0; }
+	for (i=hi2+1; i<FFT_SIZE; i++) { XI_buf[i] = 0; XQ_buf[i] = 0; }
+
+	// Calculate edges, raised cosine
+	i=lo1;																	// USB
 	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i++;
 	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i++;
 	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i++;
 	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i++;
 	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933; 
-	i=highbin-2;
-	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933; i++;
-	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i++;
-	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i++;
-	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i++;
-	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; 
-	i=FFT_SIZE-highbin-2;
+	i=lo2;
+	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i--;
+	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i--;
+	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i--;
+	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i--;
+	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933;
+	i=hi1;																	// LSB
 	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i++;
 	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i++;
 	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i++;
 	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i++;
 	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933; 
-	i=FFT_SIZE-lowbin-2;
-	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933; i++;
-	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i++;
-	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i++;
-	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i++;
-	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; 
+	i=hi2;
+	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i--;
+	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i--;
+	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i--;
+	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i--;
+	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933;
 }
 
 
@@ -145,6 +169,9 @@ inline void dsp_bandpass(int lowbin, int highbin)
 /** CORE1: RX branch **/
 /*
  * Execute RX branch signal processing
+ * max time to spend is <32ms (BUFSIZE*TIM_US)
+ * The pre-processed I/Q samples are passed in I_BUF and Q_BUF
+ * The calculated A samples are passed in A_BUF
  */
 volatile int scale0;
 volatile int scale1; 
@@ -157,7 +184,7 @@ bool __not_in_flash_func(rx)(void)
 		
 	b = dsp_active;															// Point to Active sample buffer
 	
-	/*** Copy saved I/Q buffers to FFT buffer ***/
+	/*** Copy saved I/Q buffers to FFT filter buffer ***/
 	if (++b > 2) b = 0;														// Point to Old Saved sample buffer
 	ip = &I_buf[b][0]; xip = &XI_buf[0];
 	qp = &Q_buf[b][0]; xqp = &XQ_buf[0];
@@ -177,16 +204,20 @@ bool __not_in_flash_func(rx)(void)
 
 	
 	/*** Execute FFT ***/
-	scale0 = fix_fft(&XI_buf[0], &XQ_buf[0], false);	
+	scale0 = fix_fft(&XI_buf[0], &XQ_buf[0], false);						// Frequency domain filter input
 	
 	
 	/*** Shift and filter sidebands ***/
-	XI_buf[0] = 0;
-	XQ_buf[0] = 0;
+	// At this point USB and LSB surround Fc
+	// The desired sidebands must be shifted to their target positions around 0
+	// Pos USB to bin 0 and Neg USB to bin FFT_SIZE, or
+	// Neg LSB to bin 0 and Pos LSB to bin FFT_SIZE, or
+	// Pos USB to bin 0 and Pos LSB to bin FFT_SIZE
+	XI_buf[0] = 0;	XQ_buf[0] = 0;											// No DC
 	switch (dsp_mode)
 	{
 	case MODE_USB:
-		// Shift Fc to 0Hz
+		// Shift Fc + USB to 0Hz + USB
 		for (i=1; i<BIN_3000; i++)
 		{
 			XI_buf[i]          = XI_buf[i+BIN_FC]; 
@@ -195,10 +226,10 @@ bool __not_in_flash_func(rx)(void)
 			XQ_buf[FFT_SIZE-i] = XQ_buf[FFT_SIZE-BIN_FC-i];
 		}
 		// Bandpass DSB (2x USB)
-		dsp_bandpass(BIN_100, BIN_3000);
+		dsp_bandpass(BIN_100, BIN_3000, 0);
 		break;
 	case MODE_LSB:
-		// Shift Fc to 0Hz, i.e. swap buffers
+		// Shift Fc - LSB to 0Hz - LSB
 		for (i=1; i<BIN_3000; i++)
 		{
 			XI_buf[BUFSIZE-i]  = XI_buf[BIN_FC-i]; 
@@ -209,7 +240,7 @@ bool __not_in_flash_func(rx)(void)
 			XQ_buf[FFT_SIZE-i] = XQ_buf[BUFSIZE-i];
 		}
 		// Bandpass DSB (2x LSB)
-		dsp_bandpass(BIN_100, BIN_3000);
+		dsp_bandpass(BIN_100, BIN_3000, 0);
 		break;
 	case MODE_AM:
 		// Shift the rest to the right place
@@ -221,7 +252,7 @@ bool __not_in_flash_func(rx)(void)
 			XQ_buf[i]          = XQ_buf[BIN_FC+i];
 		}
 		// Bandpass DSB (LSB + USB)
-		dsp_bandpass(BIN_100, BIN_3000);
+		dsp_bandpass(BIN_100, BIN_3000, 0);
 		break;
 	case MODE_CW:
 		// Shift carrier from Fc to 900Hz 
@@ -232,8 +263,8 @@ bool __not_in_flash_func(rx)(void)
 			XQ_buf[i+BIN_900]          = XQ_buf[BIN_FC+i]; 
 			XQ_buf[FFT_SIZE-i-BIN_900] = XQ_buf[FFT_SIZE-BIN_FC-i];
 		}
-		// Bandpass CW
-		dsp_bandpass(BIN_900-BIN_300, BIN_900+BIN_300);
+		// Bandpass CW, 600Hz
+		dsp_bandpass(BIN_900-BIN_300, BIN_900+BIN_300, 0);
 		break;
 	}
 
@@ -266,19 +297,135 @@ bool __not_in_flash_func(rx)(void)
 /** CORE1: TX branch **/
 /*
  * Execute TX branch signal processing
+ * max time to spend is <32ms (BUFSIZE*TIM_US)
+ * The pre-processed A samples are passed in A_BUF
+ * The calculated I and Q samples are passed in I_BUF and Q_BUF
  */
 bool __not_in_flash_func(tx)(void) 
 {
-	// Export FFT buffers to I/Q
+	int b;
+	int i;
+	int16_t *ip, *qp, *ap, *xip, *xqp;
+	int16_t peak;
+		
+	b = dsp_active;															// Point to Active sample buffer
 	
-	// Import A buffers
+	/*** Copy saved A buffers to FFT buffers, NULL Im. part ***/
+	if (++b > 2) b = 0;														// Point to Old Saved sample buffer
+	ap = &A_buf[b][0]; xip = &XI_buf[0];
+	xqp = &XQ_buf[0];
+	for (i=0; i<BUFSIZE; i++)
+	{
+		*xip++ = *ip++;
+		*xqp++ = 0;
+	}
+	if (++b > 2) b = 0;														// Point to New Saved sample buffer
+	ap = &A_buf[b][0]; xip = &XI_buf[BUFSIZE];
+	xqp = &XQ_buf[BUFSIZE];
+	for (i=0; i<BUFSIZE; i++)
+	{
+		*xip++ = *ip++;
+		*xqp++ = 0;
+	}
+
 	
-	// FFT
+	/*** Execute FFT ***/
+	scale0 = fix_fft(&XI_buf[0], &XQ_buf[0], false);	
 	
-	// Filter
 	
-	// iFFT
+	/*** Shift and filter sidebands ***/
+	XI_buf[0] = 0; XQ_buf[0] = 0;											// No DC
+	switch (dsp_mode)
+	{
+	case MODE_USB:
+		// Bandpass Audio, USB only
+		dsp_bandpass(BIN_100, BIN_3000, 1);
+		// Shift USB up to to Fc, assumes Fc > bandwidth
+		for (i=1; i<BIN_3000; i++)
+		{
+			XI_buf[BIN_FC+i] = XI_buf[i];
+			XQ_buf[BIN_FC+i] = XQ_buf[i];
+			XI_buf[i] = 0;	
+			XQ_buf[i] = 0;
+		}
+		for (i=1; i<BIN_3000; i++)
+		{
+			XI_buf[FFT_SIZE-BIN_FC-i] = XI_buf[BIN_FC+i];
+			XQ_buf[FFT_SIZE-BIN_FC-i] = XQ_buf[BIN_FC+i];
+		}
+		break;
+	case MODE_LSB:
+		// Bandpass Audio, LSB only
+		dsp_bandpass(BIN_100, BIN_3000, -1);
+		// Shift LSB up to Fc
+		for (i=1; i<BIN_3000; i++)
+		{
+			XI_buf[BIN_FC-i] = XI_buf[FFT_SIZE-i];
+			XQ_buf[BIN_FC-i] = XQ_buf[FFT_SIZE-i];
+			XI_buf[FFT_SIZE-i] = 0;
+			XQ_buf[FFT_SIZE-i] = 0;
+		}
+		for (i=1; i<BIN_3000; i++)
+		{
+			XI_buf[FFT_SIZE-BIN_FC+i] = XI_buf[BIN_FC-i];
+			XQ_buf[FFT_SIZE-BIN_FC+i] = XQ_buf[BIN_FC-i];
+		}
+		break;
+	case MODE_AM:
+		// Bandpass Audio
+		dsp_bandpass(BIN_100, BIN_3000, 0);
+		// Shift DSB up to Fc
+		for (i=1; i<BIN_3000; i++)
+		{
+			XI_buf[BIN_FC+i] = XI_buf[i];
+			XQ_buf[BIN_FC+i] = XQ_buf[i];
+			XI_buf[i] = 0;	
+			XQ_buf[i] = 0;
+			XI_buf[BIN_FC-i] = XI_buf[FFT_SIZE-i];
+			XQ_buf[BIN_FC-i] = XQ_buf[FFT_SIZE-i];
+			XI_buf[FFT_SIZE-i] = 0;
+			XQ_buf[FFT_SIZE-i] = 0;
+		}
+		for (i=1; i<BIN_3000; i++)
+		{
+			XI_buf[FFT_SIZE-BIN_FC-i] = XI_buf[BIN_FC+i];
+			XQ_buf[FFT_SIZE-BIN_FC-i] = XQ_buf[BIN_FC+i];
+			XI_buf[FFT_SIZE-BIN_FC+i] = XI_buf[BIN_FC-i];
+			XQ_buf[FFT_SIZE-BIN_FC+i] = XQ_buf[BIN_FC-i];
+		}
+		break;
+	case MODE_CW:
+
+		// Create a carrier on 900Hz from Fc
+
+		break;
+	}
+
 	
+	/*** Execute inverse FFT ***/
+	scale1 = fix_fft(&XI_buf[0], &XQ_buf[0], true);
+
+
+	/*** Export FFT buffer to I and Q ***/
+	b = dsp_active;															// Assume active buffer not changed, i.e. no overruns
+	if (++b > 2) b = 0;														// Point to oldest (will be next for output)
+	qp = &Q_buf[b][0]; xqp = &XQ_buf[BUFSIZE];
+	ip = &I_buf[b][0]; xip = &XI_buf[BUFSIZE];
+	for (i=0; i<BUFSIZE; i++)
+	{
+		*qp++ = *xqp++;														// Copy newest results
+		*ip++ = *xip++;														// Copy newest results
+	}
+
+
+	/*** Scale down into DAC_RANGE! ***/	
+	peak = 256;
+	for (i=0; i<BUFSIZE; i++)									
+	{
+		Q_buf[b][i] /= peak;		
+		I_buf[b][i] /= peak;
+	}
+
 	return true;
 }
 

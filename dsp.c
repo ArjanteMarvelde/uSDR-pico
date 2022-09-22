@@ -212,8 +212,6 @@ inline int16_t mag(int16_t i, int16_t q)
 
 
 
-volatile int32_t q_sample, i_sample, a_sample;								// Latest processed sample values
-
 /*** Include the desired DSP engine ***/
 
 #if DSP_FFT == 1
@@ -229,17 +227,18 @@ volatile int32_t q_sample, i_sample, a_sample;								// Latest processed sample
 /** CORE1: ADC IRQ handler **/
 /*
  * The IRQ handling is redirected to a DMA channel
- * This will transfer ADC_INT samples per channel, ADC_INT maximum is 10 (would take 60usec)
+ * This will transfer ADC_INT samples per channel, ADC_INT maximum is 10 (would take 60usec) but safer to use 8
+ * These are all registers used for the sample acquisition process
  */
-#define LSH 		8														// Shift for higher accuracy of level, also LPF
-#define ADC_LEVELS	(ADC_BIAS/2)<<LSH										// Shifted initial ADC level
-#define BSH			8														// Shift for higher accuracy of bias, also LPF
-#define ADC_BIASS	ADC_BIAS<<BSH											// Shifted initial ADC bias
-#define ADC_INT		8														// Nr of samples for integration (max 8)
-volatile int16_t  adc_sample[ADC_INT][3];									// ADC samples collection
-volatile int32_t  adc_bias[3] = {ADC_BIASS, ADC_BIASS, ADC_BIASS};			// ADC dynamic bias level
-volatile int32_t  adc_result[3];											// ADC filtered result for further processing
-volatile uint32_t adc_level[3] = {ADC_LEVELS, ADC_LEVELS, ADC_LEVELS};		// Levels for ADC channels
+#define LSH 		8														// Left shift for higher accuracy of level, also LPF
+#define ADC_LEVELS	(ADC_BIAS/2)<<LSH										// Left shifted initial ADC level value
+#define BSH			8														// Left shift for higher accuracy of bias, also LPF
+#define ADC_BIASS	ADC_BIAS<<BSH											// Left shifted initial ADC bias value
+#define ADC_INT		8														// Nr of samples for integration (max 8, depends on e.g. sample rate)
+volatile int16_t  adc_sample[ADC_INT][3];									// ADC sample collection, filled by DMA
+volatile int32_t  adc_bias[3] = {ADC_BIASS, ADC_BIASS, ADC_BIASS};			// ADC dynamic bias (DC) level
+volatile int32_t  adc_result[3];											// ADC bias-filtered result for further processing
+volatile uint32_t adc_level[3] = {ADC_LEVELS, ADC_LEVELS, ADC_LEVELS};		// Signa levels for ADC channels
 volatile int adccnt = 0;													// Sampling overflow indicator
 
 
@@ -297,12 +296,11 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 {
 	int32_t temp;
 	
-	/* 
-	 * Here the rate is 15625Hz
-	 */
+	/** Here the rate is: S_RATE=1/TIM_US, assume 15625Hz **/
 
-	// Get samples and correct for DC bias
-	// RC: ((1<<BSH)-1)*64usec = 16msec
+	// Get ADC_INT samples for each channel and correct for DC bias
+	// LPF RC: ((1<<BSH)-1)*64usec = 16msec
+	// adc_result is reset every 64usec, adc_bias is not and hence a running average.
 	adc_result[0] = 0;
 	adc_result[1] = 0;
 	adc_result[2] = 0;
@@ -316,7 +314,8 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 		adc_result[2] += (int32_t)(adc_sample[temp][2]) - (adc_bias[2]>>BSH);
 	}
 		
-	// Resstart ADCs and DMA
+	// Load new acquisition phase
+	// So restart ADCs and DMA
 	adccnt--;																// ADC overrun indicator decrement
 	adc_select_input(0);													// Start with ADC0
 	while (!adc_fifo_is_empty()) adc_fifo_get();							// Empty leftovers from fifo, if any
@@ -324,18 +323,18 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 	dma_hw->ch[CH0].read_addr = (io_rw_32)&adc_hw->fifo;					// Read from ADC FIFO
 	dma_hw->ch[CH0].write_addr = (io_rw_32)&adc_sample[0][0];				// Write to sample buffer
 	dma_hw->ch[CH0].transfer_count = ADC_INT * 3;							// Nr of 16 bit words to transfer
-	dma_hw->ch[CH0].ctrl_trig = DMA_CTRL0;									// Write ctrl word without starting the DMA
+	dma_hw->ch[CH0].ctrl_trig = DMA_CTRL0;									// Write ctrl word while starting the DMA
 
-	adc_run(true);															// Start ADC again
+	adc_run(true);															// Start ADC too
 
-	// Calculate and save level, value is left shifted by LSH = 8
-	// RC: ((1<<LSH)-1)*64usec = 16msec
+	// Calculate and save signal level, value is left shifted by LSH = 8
+	// LPF RC: ((1<<LSH)-1)*64usec = 16msec
 	adc_level[0] += (ABS(adc_result[0]))-(adc_level[0]>>LSH);
 	adc_level[1] += (ABS(adc_result[1]))-(adc_level[1]>>LSH);
 	adc_level[2] += (ABS(adc_result[2]))-(adc_level[2]>>LSH);
 
 	// Derive RSSI value from RX vector length
-	// Crude AGC mechanism **TO BE IMPROVED**
+	// Crude AGC mechanism **NEEDS TO BE IMPROVED**
 	if (!tx_enabled)	
 	{
 		// Approximate amplitude, with alpha max + beta min function
@@ -351,44 +350,46 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 		
 #if DSP_FFT == 1
 
+	// Copy samples from/to the right buffers
 	if (tx_enabled)
 	{								
-		A_buf[dsp_active][dsp_tick] = (int16_t)(tx_agc*adc_result[2]);
+		A_buf[dsp_active][dsp_tick] = (int16_t)(tx_agc*adc_result[2]);		// Copy A sample to A buffer
 		pwm_set_gpio_level(DAC_I, I_buf[dsp_active][dsp_tick] + DAC_BIAS);	// Output I to DAC
 		pwm_set_gpio_level(DAC_Q, Q_buf[dsp_active][dsp_tick] + DAC_BIAS);	// Output Q to DAC
 	}
 	else
 	{
-		I_buf[dsp_active][dsp_tick] = (int16_t)(rx_agc*adc_result[1]);
-		Q_buf[dsp_active][dsp_tick] = (int16_t)(rx_agc*adc_result[0]);
+		I_buf[dsp_active][dsp_tick] = (int16_t)(rx_agc*adc_result[1]);		// Copy I sample to I buffer
+		Q_buf[dsp_active][dsp_tick] = (int16_t)(rx_agc*adc_result[0]);		// Copy Q sample to Q buffer
 		pwm_set_gpio_level(DAC_A, A_buf[dsp_active][dsp_tick] + DAC_BIAS);	// Output A to DAC
 	}
 	
-	// When sample buffer is full, move pointer to next and signal the DSP loop
+	// When I, Q or A buffer is full, move pointer to the next and signal the DSP loop
 	if (++dsp_tick >= BUFSIZE)												// Increment tick and check range
 	{
 		dsp_tick = 0;														// Reset counter
-		if (++dsp_active > 2) dsp_active = 0;								// Rotate offset
+		if (++dsp_active > 2) dsp_active = 0;								// Point to next buffer
 		dsp_overrun++;														// Increment overrun counter
-		sem_release(&dsp_sem);												// Signal DSP loop semaphore
+		sem_release(&dsp_sem);												// Signal background processing
 	}
 	
 #else
 
+	// Copy samples from/to the right buffers
 	if (tx_enabled)
 	{
-		a_sample = tx_agc * adc_result[2];									// Store A for DSP use
-		pwm_set_gpio_level(DAC_I, i_sample);								// Output I to DAC
-		pwm_set_gpio_level(DAC_Q, q_sample);								// Output Q to DAC
+		a_sample = tx_agc * adc_result[2];									// Store A sample for background processing
+		pwm_set_gpio_level(DAC_I, i_sample);								// Output calculated I sample to DAC
+		pwm_set_gpio_level(DAC_Q, q_sample);								// Output calculated Q sample to DAC
 	}
 	else
 	{							
-		pwm_set_gpio_level(DAC_A, a_sample);								// Output Q to DAC
-		q_sample = rx_agc * adc_result[0];									// Store Q for DSP use
-		i_sample = rx_agc * adc_result[1];									// Store I for DSP use
+		q_sample = rx_agc * adc_result[0];									// Store Q sample for background processing
+		i_sample = rx_agc * adc_result[1];									// Store I sample for background processing
+		pwm_set_gpio_level(DAC_A, a_sample);								// Output calculated A sample to DAC
 	}
 	dsp_overrun++;															// Increment overrun counter
-	sem_release(&dsp_sem);													// Signal DSP loop semaphore
+	sem_release(&dsp_sem);													// Signal background processing
 
 #endif
 		
@@ -475,9 +476,10 @@ void __not_in_flash_func(dsp_loop)()
 
 	dsp_overrun = 0;
 	
+	// Background processing loop
     while(1) 
 	{
-		sem_acquire_blocking(&dsp_sem);										// Wait until timer callback releases sem
+		sem_acquire_blocking(&dsp_sem);										// Wait until timer-callback releases sem
 		dsp_overrun--;														// Decrement overrun counter
 
 		// Use adc_level[2] for VOX
