@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "pico/stdlib.h"
+#include "pico.h"
+#include "pico/bootrom.h"
 
 #include "uSDR.h"
 #include "lcd.h"
@@ -66,6 +68,14 @@ void mon_init()
 /*** ------------------------------------------------------------- ***/
 /*** Below the definitions of the shell commands, add where needed ***/
 /*** ------------------------------------------------------------- ***/
+
+/*
+ * Reboots the Pico as a USB mass storage device, ready to be programmed
+ */
+void mon_flash(void)
+{
+	reset_usb_boot(1<<PICO_DEFAULT_LED_PIN,0);
+}
 
 /* 
  * Dumps a defined range of Si5351 registers 
@@ -223,9 +233,10 @@ void mon_adc(void)
 /*
  * Command shell table, organize the command functions above
  */
-#define NCMD	8
+#define NCMD	9
 shell_t shell[NCMD]=
 {
+	{"flash", 5, &mon_flash, "flash", "Reboots into USB bootloader mode"},
 	{"si",  2, &mon_si,  "si <start> <nr of reg>", "Dumps Si5351 registers"},
 	{"vfo", 3, &mon_vfo, "vfo <id>", "Dumps vfo[id] registers"},
 	{"lt",  2, &mon_lt,  "lt (no parameters)", "LCD test, dumps characterset on LCD"},
