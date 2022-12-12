@@ -28,50 +28,45 @@
 #include "uSDR.h"
 #include "relay.h"
 
-
-
-
-
 void relay_setband(int val)
 {
-	uint8_t data[2];
-	int ret;
+	uint8_t data;
 	
-	data[0] = ((uint8_t)val)&0x1f;
-	if (i2c_put_data(i2c1, I2C_BPF, data, 1, false) < 0)
-		i2c_put_data(i2c1, I2C_BPF, data, 1, false);
+	data = ((uint8_t)val)&0x1f;
+	if (i2c_put_data(i2c1, I2C_BPF, &data, 1, false) < 0)
+		i2c_put_data(i2c1, I2C_BPF, &data, 1, false);
 	sleep_ms(1);
 }
 
 int relay_getband(void)
 {
-	uint8_t data[2];
+	uint8_t data;
 	int ret;
 	
-	ret = i2c_get_data(i2c1, I2C_BPF, data, 1, false);
-	if (ret>=0) 
-		ret=data[0];
+	ret = i2c_get_data(i2c1, I2C_BPF, &data, 1, false);
+	if (ret>=0)
+		ret=data;
 	return(ret);
 }
 
 void relay_setattn(int val)
 {
-	uint8_t data[2];
+	uint8_t data;
 	
-	data[0] = ((uint8_t)val)&0x07;
-	if (i2c_put_data(i2c1, I2C_RX, data, 1, false) < 0)
-		i2c_put_data(i2c1, I2C_RX, data, 1, false);
+	data = ((uint8_t)val)&0x07;
+	if (i2c_put_data(i2c1, I2C_RX, &data, 1, false) < 0)
+		i2c_put_data(i2c1, I2C_RX, &data, 1, false);
 	sleep_ms(1);
 }
 
 int relay_getattn(void)
 {
-	uint8_t data[2];
+	uint8_t data;
 	int ret;
 	
-	ret = i2c_get_data(i2c1, I2C_RX, data, 1, false);
+	ret = i2c_get_data(i2c1, I2C_RX, &data, 1, false);
 	if (ret>=0) 
-		ret=data[0];
+		ret=data;
 	return(ret);
 }
 
