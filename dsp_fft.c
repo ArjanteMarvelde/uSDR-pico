@@ -316,7 +316,7 @@ bool __not_in_flash_func(tx)(void)
 	xqp = &XQ_buf[0];
 	for (i=0; i<BUFSIZE; i++)
 	{
-		*xip++ = *ip++;
+		*xip++ = *ap++;
 		*xqp++ = 0;
 	}
 	if (++b > 2) b = 0;														// Point to New Saved sample buffer
@@ -324,7 +324,7 @@ bool __not_in_flash_func(tx)(void)
 	xqp = &XQ_buf[BUFSIZE];
 	for (i=0; i<BUFSIZE; i++)
 	{
-		*xip++ = *ip++;
+		*xip++ = *ap++;
 		*xqp++ = 0;
 	}
 
