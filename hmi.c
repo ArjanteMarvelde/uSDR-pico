@@ -101,12 +101,12 @@
 #define HMI_NVOX	4
 #define HMI_NBPF	5
 char hmi_noption[HMI_NSTATES] = {HMI_NTUNE, HMI_NMODE, HMI_NAGC, HMI_NPRE, HMI_NVOX, HMI_NBPF};
-char hmi_o_menu[HMI_NSTATES][8] = {"Tune","Mode","AGC","Pre","VOX"};		// Indexed by hmi_state
-char hmi_o_mode[HMI_NMODE][8] = {"USB","LSB","AM ","CW "};					// Indexed by hmi_sub[HMI_S_MODE]
-char hmi_o_agc [HMI_NAGC][8] = {"NoGC","Slow","Fast"};						// Indexed by hmi_sub[HMI_S_AGC]
-char hmi_o_pre [HMI_NPRE][8] = {"-30dB","-20dB","-10dB","  0dB","+10dB"};	// Indexed by hmi_sub[HMI_S_PRE]
-char hmi_o_vox [HMI_NVOX][8] = {"NoVOX","VOX-L","VOX-M","VOX-H"};			// Indexed by hmi_sub[HMI_S_VOX]
-char hmi_o_bpf [HMI_NBPF][8] = {"<2.5","2-6","5-12","10-24","20-40"};		// Indexed by 
+const char* hmi_o_menu[HMI_NSTATES] = {"Tune","Mode","AGC","Pre","VOX"};		// Indexed by hmi_state
+const char* hmi_o_mode[HMI_NMODE] = {"USB","LSB","AM ","CW "};					// Indexed by hmi_sub[HMI_S_MODE]
+const char* hmi_o_agc [HMI_NAGC] = {"NoGC","Slow","Fast"};						// Indexed by hmi_sub[HMI_S_AGC]
+const char* hmi_o_pre [HMI_NPRE] = {"-30dB","-20dB","-10dB","  0dB","+10dB"};	// Indexed by hmi_sub[HMI_S_PRE]
+const char* hmi_o_vox [HMI_NVOX] = {"NoVOX","VOX-L","VOX-M","VOX-H"};			// Indexed by hmi_sub[HMI_S_VOX]
+const char* hmi_o_bpf [HMI_NBPF] = {"<2.5","2-6","5-12","10-24","20-40"};		// Indexed by hmi_sub[HMI_S_BPF]
 
 // Map option to setting
 int  hmi_mode[HMI_NMODE] = {MODE_USB, MODE_LSB, MODE_AM, MODE_CW};
