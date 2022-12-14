@@ -32,7 +32,7 @@
 
 volatile bool     tx_enabled;												// TX branch active
 volatile uint32_t dsp_overrun;												// Overrun counter
-
+static int dma_channel;														// DMA channel number
 
 /* 
  * DAC_RANGE defines PWM cycle, determining DAC resolution and PWM frequency.
@@ -244,36 +244,13 @@ volatile int adccnt = 0;													// Sampling overflow indicator
 
 
 /** CORE1: DMA IRQ handler **/
-
-// From RP2040 datasheet, DMA Status/Control register layout
-// 0x80000000 [31]    : AHB_ERROR (0): Logical OR of the READ_ERROR and WRITE_ERROR flags
-// 0x40000000 [30]    : READ_ERROR (0): If 1, the channel received a read bus error
-// 0x20000000 [29]    : WRITE_ERROR (0): If 1, the channel received a write bus error
-// 0x01000000 [24]    : BUSY (0): This flag goes high when the channel starts a new transfer sequence, and low when the...
-// 0x00800000 [23]    : SNIFF_EN (0): If 1, this channel's data transfers are visible to the sniff hardware, and each...
-// 0x00400000 [22]    : BSWAP (0): Apply byte-swap transformation to DMA data
-// 0x00200000 [21]    : IRQ_QUIET (0): In QUIET mode, the channel does not generate IRQs at the end of every transfer block
-// 0x001f8000 [20:15] : TREQ_SEL (0): Select a Transfer Request signal
-// 0x00007800 [14:11] : CHAIN_TO (0): When this channel completes, it will trigger the channel indicated by CHAIN_TO
-// 0x00000400 [10]    : RING_SEL (0): Select whether RING_SIZE applies to read or write addresses
-// 0x000003c0 [9:6]   : RING_SIZE (0): Size of address wrap region
-// 0x00000020 [5]     : INCR_WRITE (0): If 1, the write address increments with each transfer
-// 0x00000010 [4]     : INCR_READ (0): If 1, the read address increments with each transfer
-// 0x0000000c [3:2]   : DATA_SIZE (0): Set the size of each bus transfer (byte/halfword/word)
-// 0x00000002 [1]     : HIGH_PRIORITY (0): HIGH_PRIORITY gives a channel preferential treatment in issue scheduling: in...
-// 0x00000001 [0]     : EN (0): DMA Channel Enable
-
-// 0x00120027 (IRQ_QUIET=0x0, TREQ_SEL=0x24, CHAIN_TO=0, INCR_WRITE=1, INCR_READ=0, DATA_SIZE=1, HIGH_PRIORITY=1, EN=1)	
-
 /*
  * The DMA handler only stops conversions and resets interrupt flag, data is processed in timer callback.
  */
-#define CH0			0
-#define DMA_CTRL0	0x00120027
 void __not_in_flash_func(dma_handler)(void)
 {
 	adc_run(false);															// Stop freerunning ADC
-	dma_hw->ints0 = 1u << CH0;												// Clear the interrupt request.
+	dma_irqn_acknowledge_channel(DMA_IRQ_0, dma_channel);					// Clear the interrupt request.
 	//while (!adc_fifo_is_empty()) adc_fifo_get();							// Empty leftovers from fifo
 	adccnt++;																// ADC overrun indicator increment
 }
@@ -318,12 +295,9 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 	// So restart ADCs and DMA
 	adccnt--;																// ADC overrun indicator decrement
 	adc_select_input(0);													// Start with ADC0
-	while (!adc_fifo_is_empty()) adc_fifo_get();							// Empty leftovers from fifo, if any
+	adc_fifo_drain();														// Empty leftovers from fifo, if any
 
-	dma_hw->ch[CH0].read_addr = (io_rw_32)&adc_hw->fifo;					// Read from ADC FIFO
-	dma_hw->ch[CH0].write_addr = (io_rw_32)&adc_sample[0][0];				// Write to sample buffer
-	dma_hw->ch[CH0].transfer_count = ADC_INT * 3;							// Nr of 16 bit words to transfer
-	dma_hw->ch[CH0].ctrl_trig = DMA_CTRL0;									// Write ctrl word while starting the DMA
+	dma_channel_transfer_to_buffer_now(dma_channel, &adc_sample[0][0], ADC_INT * 3);											// Start DMA
 
 	adc_run(true);															// Start ADC too
 
@@ -443,15 +417,27 @@ void __not_in_flash_func(dsp_loop)()
 	/*
 	 * Setup and start DMA channel CH0
 	 */
-	dma_channel_set_irq0_enabled(CH0, true);								// Raise IRQ line 0 when the channel finishes a block
+	dma_channel = dma_claim_unused_channel(true);
+
 	irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);						// Install IRQ handler
 	irq_set_enabled(DMA_IRQ_0, true);										// Enable it
 	irq_set_priority(DMA_IRQ_0, PICO_HIGHEST_IRQ_PRIORITY);					// Prevent race condition with timer
 	
-	dma_hw->ch[CH0].read_addr = (io_rw_32)&adc_hw->fifo;					// Read from ADC FIFO
-	dma_hw->ch[CH0].write_addr = (io_rw_32)&adc_sample[0][0];				// Write to sample buffer
-	dma_hw->ch[CH0].transfer_count = ADC_INT * 3;							// Nr of 16 bit words to transfer
-	dma_hw->ch[CH0].ctrl_trig = DMA_CTRL0;									// Write ctrl word and start the DMA
+	dma_channel_config dma_config = dma_channel_get_default_config(dma_channel);
+
+	channel_config_set_dreq(&dma_config, DREQ_ADC);
+	channel_config_set_transfer_data_size(&dma_config, DMA_SIZE_16);
+	channel_config_set_read_increment(&dma_config, false);
+	channel_config_set_write_increment(&dma_config, true);
+	dma_channel_set_irq0_enabled(dma_channel, true); // Raise IRQ line 0 when the channel finishes a block
+
+	dma_channel_configure(dma_channel, 
+		&dma_config,
+		&adc_sample[0][0],													// Read from ADC FIFO
+		&adc_hw->fifo,														// Write to sample buffer
+		ADC_INT * 3,														// Nr of 16 bit words to transfer
+		true																// Start the DMA
+		);
 
 	adc_run(true);															// Also start the ADC
 
