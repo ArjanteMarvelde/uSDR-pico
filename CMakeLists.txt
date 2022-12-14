@@ -32,6 +32,7 @@ pico_sdk_init()
 # relay.c	Switching for the band filter and attenuator relays
 add_executable(uSDR-FFT uSDR.c lcd.c si5351.c dsp.c fix_fft.c hmi.c monitor.c relay.c)
 
+target_compile_options(uSDR-FFT PRIVATE -Wall)
 pico_set_program_name(uSDR-FFT "uSDR-FFT")
 pico_set_program_version(uSDR-FFT "0.1")
 
