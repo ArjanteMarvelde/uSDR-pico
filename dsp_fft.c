@@ -129,13 +129,19 @@ void  __not_in_flash_func(dsp_bandpass)(int lowbin, int highbin, int sign)
 	XI_buf[0] = 0; XQ_buf[0] = 0; 	
 	
 	// Boundaries are inclusive
-	if (sign>=0) { lo1 = lowbin-2; lo2 = highbin+2; }
-	if (sign<=0) { hi1 = FFT_SIZE-highbin-2; hi2 = FFT_SIZE-lowbin+2; }
+	lo1 = lowbin-2;
+	lo2 = highbin+2;
+	hi1 = FFT_SIZE-highbin-2;
+	hi2 = FFT_SIZE-lowbin+2;
 
 	// Null all bins excluded from filter
-	for (i=1; i<lo1; i++)          { XI_buf[i] = 0; XQ_buf[i] = 0; }
-	for (i=lo2+1; i<hi1; i++)      { XI_buf[i] = 0; XQ_buf[i] = 0; }
-	for (i=hi2+1; i<FFT_SIZE; i++) { XI_buf[i] = 0; XQ_buf[i] = 0; }
+	if (sign>=0) { 
+		for (i=1; i<lo1; i++)			{ XI_buf[i] = 0; XQ_buf[i] = 0; }
+	}
+	for (i=lo2+1; i<hi1; i++)      		{ XI_buf[i] = 0; XQ_buf[i] = 0; }
+	if (sign<=0) {
+		for (i=hi2+1; i<FFT_SIZE; i++)	{ XI_buf[i] = 0; XQ_buf[i] = 0; }
+	}
 
 	// Calculate edges, raised cosine
 	i=lo1;																	// USB
