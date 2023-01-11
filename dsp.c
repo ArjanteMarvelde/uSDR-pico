@@ -297,7 +297,7 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t)
 	adc_select_input(0);													// Start with ADC0
 	adc_fifo_drain();														// Empty leftovers from fifo, if any
 
-	dma_channel_transfer_to_buffer_now(dma_channel, &adc_sample[0][0], ADC_INT * 3);											// Start DMA
+	dma_channel_set_write_addr(dma_channel, &adc_sample[0][0], true);		// Start DMA
 
 	adc_run(true);															// Start ADC too
 
