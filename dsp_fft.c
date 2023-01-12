@@ -100,14 +100,22 @@ volatile uint32_t dsp_tickx  = 0;											// Load indicator DSP loop
 
 // Spectrum bins for a frequency
 #define BIN(f)			(int)(((f)*FFT_SIZE+S_RATE/2)/S_RATE)
-#define BIN_FC			  256												// BIN_FC > BIN_3000 to avoid aliasing!
-#define BIN_100       	    7
-#define BIN_300		 	   20
-#define BIN_900		 	   59
-#define BIN_3000		  197
+#define BIN_FC			BIN(FC_OFFSET)									// BIN_FC > BIN_3000 to avoid aliasing!
+#define BIN_100			BIN(100)
+#define BIN_300			BIN(300)
+#define BIN_900			BIN(900)
+#define BIN_3000		BIN(3000)
 
 
-
+static inline void __not_in_flash_func(dsp_curve)(int16_t *pData, int step)
+{
+	int i = 0;
+	pData[i] = pData[i]/15; i+=step;
+	pData[i] = pData[i]/4; i+=step;
+	pData[i] = pData[i]/2; i+=step;
+	pData[i] = ((int32_t)pData[i]*3)/4; i+=step;
+	pData[i] = ((int32_t)pData[i]*933)/1000;
+}
 
 /*
  * This applies a bandpass filter to XI and XQ buffers
@@ -138,30 +146,17 @@ void  __not_in_flash_func(dsp_bandpass)(int lowbin, int highbin, int sign)
 	for (i=hi2+1; i<FFT_SIZE; i++) { XI_buf[i] = 0; XQ_buf[i] = 0; }
 
 	// Calculate edges, raised cosine
-	i=lo1;																	// USB
-	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i++;
-	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i++;
-	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i++;
-	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i++;
-	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933; 
-	i=lo2;
-	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i--;
-	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i--;
-	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i--;
-	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i--;
-	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933;
-	i=hi1;																	// LSB
-	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i++;
-	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i++;
-	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i++;
-	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i++;
-	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933; 
-	i=hi2;
-	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i--;
-	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i--;
-	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i--;
-	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i--;
-	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933;
+	dsp_curve(&XI_buf[lo1], 1);
+	dsp_curve(&XQ_buf[lo1], 1);
+
+	dsp_curve(&XI_buf[lo2], -1);
+	dsp_curve(&XQ_buf[lo2], -1);
+
+	dsp_curve(&XI_buf[hi1], 1);
+	dsp_curve(&XQ_buf[hi1], 1);
+
+	dsp_curve(&XI_buf[hi2], -1);
+	dsp_curve(&XQ_buf[hi2], -1);
 }
 
 
