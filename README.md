@@ -135,7 +135,7 @@ The PCB files have been made with Eagle 5.11, and can be modified or otherwise r
 
 # Background
 The folder **$PICO/docs** also contains some manuals, of which the *C-SDK description*, the *RP2040 datasheet* and the *Pico Pinout* are absolute must-reads when you start writing software. Note that this folder is only created by the **ndabas** script, after manual installation you should find these on the Raspberry website.  
-For calculating filters I have used the free software from [Iowa Hills](http://www.iowahills.com/8DownloadPage.html) (website has been down for a while)  
+For calculating filters I have used the free software from [Iowa Hills](http://www.iowahills.com/8DownloadPage.html) (website has been down for a while, but files can be found using [Wayback Machine]( https://web.archive.org/web/20210819042054/http://www.iowahills.com/8DownloadPage.html) )  
 I also used the online FIR filter calculator [T-Filter](http://t-filter.engineerjs.com/) 
 
 # Copyright notice
