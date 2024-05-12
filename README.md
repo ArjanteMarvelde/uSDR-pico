@@ -1,3 +1,16 @@
+*Note*: I'm working on V4.0 right now, with some difference in hardware:  
+- Integrated audio on the CPU board  
+- Moved VFO to Mixer board  
+- Applied different way to derive FST3253 clocks, no longer dependent on 90 deg phasing of VFO  
+- Use discrete MMIC for LNA on RX board  
+- New low power TX board  
+- New layout BPF board  
+- Proper bus connectors for all 5 boards,  
+- Increased board size: 2" x 3.7", with the bus connectors this enables a cleaner stack  
+- LCD graphical display (ILI9341 based 320x240)  
+- No more RS232, replaced with USB interface which can also be used for programming  
+- Recalculated all filters  
+
 # uSDR-pico
 This Git repository contains a Micro-SDR implementation, based on a RP2040 Pi Pico.  
 
