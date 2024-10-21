@@ -1,4 +1,4 @@
-*Note*: The new V4.00 is available in DRAFT:  
+*Note*: The new V4.0 is available in DRAFT:  
 - Integrated audio on the CPU board  
 - Moved VFO to Mixer board  
 - Applied different way to derive FST3253 clocks, no longer dependent on 90 deg phasing of VFO  
@@ -11,9 +11,10 @@
 - No more RS232, replaced with USB interface which can also be used for programming  
 - Recalculated all filters  
 
-The 4.0 schematics are now available in KiCAD format, so open for all to adapt. In the package I included a library with some dedicated definitions.  
+The V4.0 schematics are now available in KiCAD format, so open for all to adapt. In the package I included a library with some dedicated definitions.  
 
 Still to be done:  
+- Debug hardware, patch and publish V4.1  
 - All software updates, this will take place after assembly of the hardware  
 - Update all documentation to be consistent with the actual implementation  
 
