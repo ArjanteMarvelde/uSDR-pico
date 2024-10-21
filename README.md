@@ -11,7 +11,7 @@
 - No more RS232, replaced with USB interface which can also be used for programming  
 - Recalculated all filters  
 
-The schematics are now available in KiCAD format, so open for all to adapt. In the package I included a library with some dedicated definitions.  
+The 4.0 schematics are now available in KiCAD format, so open for all to adapt. In the package I included a library with some dedicated definitions.  
 
 Still to be done:  
 - All software updates, this will take place after assembly of the hardware  
