@@ -68,11 +68,12 @@
  *
  * The bin step is the sampling frequency divided by the FFT_SIZE.
  * So for S_RATE=15625 and FFT_SIZE=1024 this step is 15625/1024=15.259 Hz
- * The Carrier offset (Fc) is at about half the Nyquist frequency: bin 256 or 3906 Hz
+ * The Subcarrier offset (Fc) is at about half the Nyquist frequency: bin 256 or 3906 Hz
  *
  */
 
 #include "uSDR.h"
+#include "dsp.h"
 
 /*
  * FFT buffer allocation
@@ -100,68 +101,116 @@ volatile uint32_t dsp_tickx  = 0;											// Load indicator DSP loop
 
 // Spectrum bins for a frequency
 #define BIN(f)			(int)(((f)*FFT_SIZE+S_RATE/2)/S_RATE)
-#define BIN_FC			  256												// BIN_FC > BIN_3000 to avoid aliasing!
-#define BIN_100       	    7
-#define BIN_300		 	   20
-#define BIN_900		 	   59
-#define BIN_3000		  197
+#define BIN_FC			  256												// Use BIN_FC > BIN_3000 to avoid aliasing!
+#define BIN_100       	    7												//  110Hz bin
+#define BIN_300		 	   20												//  300Hz bin
+#define BIN_900		 	   59												//  900Hz bin
+#define BIN_3000		  197												// 3000Hz bin
+#define BIN_3600          236												// 3600Hz bin
 
 
-
+/*
+ * Shift center frequency back to DC by multiply samples with e(-j*w*t)
+ * w = 2*pi*f, where f is FC_OFFSET (3906Hz)
+ * t = n*Ts, where Ts is 1/S_RATE (1/15625Hz)
+ * So the exponent becomes n*2*pi*FC_OFFSET/S_RATE = n*pi/2 (since FC_OFFSET = S_RATE/4)
+ * The complex offset is then cos(-n*pi/2) + j*sin(-n*pi/2) ==> (a,b) = ( 1, 0); ( 0,-1); (-1, 0); ( 0, 1); ... 
+ * Complex multiply: (a+jb)*(I+jQ)=(aI-bQ) + j(aQ+bI)       ==> (I,Q) = ( I, Q); ( Q,-I); (-I,-Q); (-Q, I); ...
+ */
+void __not_in_flash_func(dsp_shift)(void) 
+{
+	int i;
+	uint16_t x;
+	
+	for (i=0; i<FFT_SIZE; i+=4)
+	{
+		x = XI_buf[i+1];
+		XI_buf[i+1] = XQ_buf[i+1];
+		XQ_buf[i+1] = -x;
+		XI_buf[i+2] = -XI_buf[i+2];
+		XQ_buf[i+2] = -XQ_buf[i+2];
+		x = XI_buf[i+3];
+		XI_buf[i+3] = -XQ_buf[i+3];
+		XQ_buf[i+3] = x;
+	}
+}
 
 /*
  * This applies a bandpass filter to XI and XQ buffers
  * lowbin and highbin edges must be between 3 and FFT_SIZE/2 - 3
- * sign: <0 only LSB is passed
- *       >0 only USB is passed
- *       =0 LSB and USB are passed
  * Edge is a 7 bin raised cosine flank, i.e. 100Hz wide
  * Coefficients are: 0, 0.067, 0.25, 0.5, 0.75, 0.933, 1
  *    where the edge bin is in the center of this flank
  * Note: maybe make slope less steep, e.g. 9 or 11 bins 
+ *   ____                      ____
+ * _/    \____________________/    \_
+ * [-------|-------][-------|-------]
+ * ^                ^               ^
+ * 0                BUFSIZE         FFTSIZE
+ *
+ * The parameter sidebands determines whether LSB (-1) USB (+1) or DSB(0) is passed.
  */
-void  __not_in_flash_func(dsp_bandpass)(int lowbin, int highbin, int sign)
+#define DSP_PASS_LSB	-1
+#define DSP_PASS_USB	 1
+#define DSP_PASS_DSB	 0
+void __not_in_flash_func(dsp_bandpass)(int lowbin, int highbin, int sidebands)
 {
 	int i, lo1, lo2, hi1, hi2;
 	
 	if ((lowbin<3)||(highbin>(FFT_SIZE/2-3))||(highbin-lowbin<6)) return;
 	
-	XI_buf[0] = 0; XQ_buf[0] = 0; 	
-	
 	// Boundaries are inclusive
-	if (sign>=0) { lo1 = lowbin-2; lo2 = highbin+2; }
-	if (sign<=0) { hi1 = FFT_SIZE-highbin-2; hi2 = FFT_SIZE-lowbin+2; }
+	lo1 = lowbin-2; 
+	lo2 = highbin+2;
+	hi1 = FFT_SIZE-highbin-2; 
+	hi2 = FFT_SIZE-lowbin+2;
 
-	// Null all bins excluded from filter
+	// Null all bins excluded from passbands
+	// Calculate edges as raised cosine
+	XI_buf[0] = 0; XQ_buf[0] = 0; 											// Block DC
 	for (i=1; i<lo1; i++)          { XI_buf[i] = 0; XQ_buf[i] = 0; }
-	for (i=lo2+1; i<hi1; i++)      { XI_buf[i] = 0; XQ_buf[i] = 0; }
-	for (i=hi2+1; i<FFT_SIZE; i++) { XI_buf[i] = 0; XQ_buf[i] = 0; }
 
-	// Calculate edges, raised cosine
-	i=lo1;																	// USB
-	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i++;
-	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i++;
-	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i++;
-	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i++;
-	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933; 
-	i=lo2;
-	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i--;
-	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i--;
-	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i--;
-	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i--;
-	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933;
-	i=hi1;																	// LSB
-	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i++;
-	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i++;
-	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i++;
-	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i++;
-	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933; 
-	i=hi2;
-	XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i--;
-	XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i--;
-	XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i--;
-	XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i--;
-	XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933;
+	if (sidebands==DSP_PASS_LSB)											// LSB only: block USB
+	{
+		for (i=lo1; i<lo2; i++) { XI_buf[i] = 0; XQ_buf[i] = 0; }
+	}
+	else
+	{
+		i=lo1;
+		XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i++;
+		XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i++;
+		XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i++;
+		XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i++;
+		XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933; 
+		i=lo2;
+		XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i--;
+		XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i--;
+		XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i--;
+		XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i--;
+		XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933;
+	}
+	for (i=lo2+1; i<hi1; i++)      { XI_buf[i] = 0; XQ_buf[i] = 0; }
+
+	if (sidebands==DSP_PASS_USB)											// USB only: block LSB
+	{
+		for (i=hi1; i<hi2; i++) { XI_buf[i] = 0; XQ_buf[i] = 0; }
+	}
+	else
+	{
+		i=hi1;
+		XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i++;
+		XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i++;
+		XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i++;
+		XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i++;
+		XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933; 
+		i=hi2;
+		XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i--;
+		XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i--;
+		XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i--;
+		XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i--;
+		XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933;
+	}
+	for (i=hi2+1; i<FFT_SIZE; i++) { XI_buf[i] = 0; XQ_buf[i] = 0; }
 }
 
 
@@ -202,67 +251,32 @@ bool __not_in_flash_func(rx)(void)
 		*xqp++ = *qp++;
 	}
 
+	dsp_shift();															// Downshift samples by FC_OFFSET
 	
 	/*** Execute FFT ***/
 	scale0 = fix_fft(&XI_buf[0], &XQ_buf[0], false);						// Frequency domain filter input
 	
 	
 	/*** Shift and filter sidebands ***/
-	// At this point USB and LSB surround Fc
+	// At this point USB and LSB surround DC
 	// The desired sidebands must be shifted to their target positions around 0
-	// Pos USB to bin 0 and Neg USB to bin FFT_SIZE, or
-	// Neg LSB to bin 0 and Pos LSB to bin FFT_SIZE, or
-	// Pos USB to bin 0 and Pos LSB to bin FFT_SIZE
-	XI_buf[0] = 0;	XQ_buf[0] = 0;											// No DC
+	// [-------|-------][-------|-------]
+	//  USB0                        LSB0
 	switch (dsp_mode)
 	{
 	case MODE_USB:
-		// Shift Fc + USB to 0Hz + USB
-		for (i=1; i<BIN_3000; i++)
-		{
-			XI_buf[i]          = XI_buf[i+BIN_FC]; 
-			XI_buf[FFT_SIZE-i] = XI_buf[FFT_SIZE-BIN_FC-i];
-			XQ_buf[i]          = XQ_buf[i+BIN_FC]; 
-			XQ_buf[FFT_SIZE-i] = XQ_buf[FFT_SIZE-BIN_FC-i];
-		}
-		// Bandpass DSB (2x USB)
-		dsp_bandpass(BIN_100, BIN_3000, 0);
+		// Bandpass USB
+		dsp_bandpass(BIN_100, BIN_3000, DSP_PASS_USB);
 		break;
 	case MODE_LSB:
-		// Shift Fc - LSB to 0Hz - LSB
-		for (i=1; i<BIN_3000; i++)
-		{
-			XI_buf[BUFSIZE-i]  = XI_buf[BIN_FC-i]; 
-			XI_buf[i]          = XI_buf[FFT_SIZE-BIN_FC+i];
-			XI_buf[FFT_SIZE-i] = XI_buf[BUFSIZE-i];
-			XQ_buf[BUFSIZE-i]  = XQ_buf[BIN_FC-i]; 
-			XQ_buf[i]          = XQ_buf[FFT_SIZE-BIN_FC+i];
-			XQ_buf[FFT_SIZE-i] = XQ_buf[BUFSIZE-i];
-		}
-		// Bandpass DSB (2x LSB)
-		dsp_bandpass(BIN_100, BIN_3000, 0);
+		// Bandpass LSB
+		dsp_bandpass(BIN_100, BIN_3000, DSP_PASS_LSB);
 		break;
 	case MODE_AM:
-		// Shift the rest to the right place
-		for (i=1; i<BIN_3000; i++)
-		{
-			XI_buf[FFT_SIZE-i] = XI_buf[BIN_FC-i]; 
-			XI_buf[i]          = XI_buf[BIN_FC+i];
-			XQ_buf[FFT_SIZE-i] = XQ_buf[BIN_FC-i]; 
-			XQ_buf[i]          = XQ_buf[BIN_FC+i];
-		}
 		// Bandpass DSB (LSB + USB)
-		dsp_bandpass(BIN_100, BIN_3000, 0);
+		dsp_bandpass(BIN_100, BIN_3000, DSP_PASS_DSB);
 		break;
 	case MODE_CW:
-		// Shift carrier from Fc to 900Hz 
-		for (i=-BIN_900+1; i<BIN_900-1; i++) 
-		{
-			XI_buf[i+BIN_900]          = XI_buf[BIN_FC+i]; 
-			XI_buf[FFT_SIZE-i-BIN_900] = XI_buf[FFT_SIZE-BIN_FC-i];
-			XQ_buf[i+BIN_900]          = XQ_buf[BIN_FC+i]; 
-			XQ_buf[FFT_SIZE-i-BIN_900] = XQ_buf[FFT_SIZE-BIN_FC-i];
-		}
 		// Bandpass CW, 600Hz
 		dsp_bandpass(BIN_900-BIN_300, BIN_900+BIN_300, 0);
 		break;
@@ -334,7 +348,7 @@ bool __not_in_flash_func(tx)(void)
 	
 	
 	/*** Shift and filter sidebands ***/
-	XI_buf[0] = 0; XQ_buf[0] = 0;											// No DC
+	XI_buf[0] = 0; XQ_buf[0] = 0;											// Block DC
 	switch (dsp_mode)
 	{
 	case MODE_USB:

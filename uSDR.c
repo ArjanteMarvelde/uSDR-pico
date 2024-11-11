@@ -18,6 +18,7 @@
 #include "pico/stdlib.h"
 #include "pico/sem.h"
 #include "hardware/i2c.h"
+#include "hardware/spi.h"
 #include "hardware/gpio.h"
 #include "hardware/timer.h"
 #include "hardware/clocks.h"
@@ -100,29 +101,30 @@ int main()
 	add_repeating_timer_ms(-LED_MS, led_callback, NULL, &led_timer);
 
 	/*
-	 * i2c0 is used for the si5351 interface
-	 * i2c1 is used for the LCD and all other interfaces
-	 * if the display cannot keep up, try lowering the i2c1 frequency
-	 * Do not invoke i2c using functions from interrupt handlers!
+	 * i2c0 is used for the si5351 and expander interfaces
+	 * spi1 is used for the LCD interface
+	 * Do not invoke i2c functions from interrupt handlers!
 	 */
-	i2c_init(i2c0, 400000);													// i2c0 initialisation at 400Khz
+	i2c_init(i2c0, 100000);													// i2c0 initialisation at 100 kHz
 	gpio_set_function(I2C0_SDA, GPIO_FUNC_I2C);
 	gpio_set_function(I2C0_SCL, GPIO_FUNC_I2C);
 	gpio_pull_up(I2C0_SDA);
 	gpio_pull_up(I2C0_SCL);
-	i2c_init(i2c1, 100000);													// i2c1 initialisation at 100Khz
-	gpio_set_function(I2C1_SDA, GPIO_FUNC_I2C);
-	gpio_set_function(I2C1_SCL, GPIO_FUNC_I2C);
-	gpio_pull_up(I2C1_SDA);
-	gpio_pull_up(I2C1_SCL);
+	
+	spi_init(spi1, 40*1000*1000);											// spi1 initialisation at 40 MHz
+	gpio_set_function(LCD_CLK, GPIO_FUNC_SPI);
+	gpio_set_function(LCD_MOSI, GPIO_FUNC_SPI);
+	spi_set_format(spi1, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);			// 8 bit transfer, clock idle low, clock rising edge
+	
 
 	/* Initialize the SW units */
+	si_enable(0, false);													// Disable VFO
 	mon_init();																// Monitor shell on stdio
+	lcd_init();																// LCD output unit
+	hmi_init();																// HMI user inputs
 	si_init();																// VFO control unit
 	dsp_init();																// Signal processing unit
 	relay_init();
-	lcd_init();																// LCD output unit
-	hmi_init();																// HMI user inputs
 	
 	/* A simple round-robin scheduler */
 	sem_init(&loop_sem, 1, 1) ;	

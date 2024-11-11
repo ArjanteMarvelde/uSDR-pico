@@ -25,12 +25,14 @@
 
 
 // Some special character ASCII codes
-#define CR			13
-#define LF			10
-#define SP			32
+#define BS			  8
+#define CR			 13
+#define LF			 10
+#define SP			 32
+#define DEL			127
 
-#define CMD_LEN		80
-#define CMD_ARGS	16
+#define CMD_LEN		 80
+#define CMD_ARGS	 16
 
 
 char mon_cmd[CMD_LEN+1];							// Command string buffer
@@ -104,7 +106,7 @@ void mon_si(void)
 vfo_t m_vfo;
 void mon_vfo(void)
 {
-	int i;
+	int i=0;
 
 	if (nargs>1) 
 		i = atoi(argv[1]);
@@ -112,9 +114,9 @@ void mon_vfo(void)
 
 	si_getvfo(i, &m_vfo);														// Get local copy
 	printf("Frequency: %lu\n", m_vfo.freq);
-	printf("Phase    : %u\n", (int)(m_vfo.phase));
-	printf("Ri       : %lu\n", (int)(m_vfo.ri));
-	printf("MSi      : %lu\n", (int)(m_vfo.msi));
+	printf("Phase    : %d\n", (int)(m_vfo.phase));
+	printf("Ri       : %d\n", (int)(m_vfo.ri));
+	printf("MSi      : %d\n", (int)(m_vfo.msi));
 	printf("MSN      : %g\n\n", m_vfo.msn);
 }
 
@@ -124,9 +126,14 @@ void mon_vfo(void)
  */
 void mon_lt(void)
 {
+	int c=PICO_ERROR_TIMEOUT;
+	
 	printf("Check LCD...");
 	lcd_test();
 	printf("\n");
+	while (c==PICO_ERROR_TIMEOUT)
+		c = getchar_timeout_us(10L);				// NOTE: this is the only SDK way to read from stdin
+	lcd_clear(0, 0, LCD_WIDTH, LCD_HEIGHT, BLACK);
 }
 
 
@@ -150,7 +157,7 @@ void mon_pt(void)
 }
 
 /*
- * Relay read or write
+ * BPF relay read or write
  */
 void mon_bp(void)
 {
@@ -173,7 +180,7 @@ void mon_bp(void)
 }
 
 /*
- * Relay read or write
+ * RX relay read or write
  */
 void mon_rx(void)
 {
@@ -199,7 +206,8 @@ void mon_rx(void)
 /* 
  * Checks for overruns 
  */
-extern volatile uint32_t dsp_overrun;
+extern volatile int32_t dsp_overrun;
+extern volatile int adccnt;
 #if DSP_FFT == 1
 extern volatile uint32_t dsp_tickx;
 extern volatile int scale0;
@@ -207,7 +215,8 @@ extern volatile int scale1;
 #endif
 void mon_or(void)
 {
-	printf("DSP overruns   : %d\n", dsp_overrun);
+	printf("ADCc  : %5d\n", adccnt);
+	printf("DSP overruns   : %ld\n", dsp_overrun);
 #if DSP_FFT == 1
 	printf("DSP loop load  : %lu%%\n", (100*dsp_tickx)/512);	
 	printf("FFT scale = %d, iFFT scale = %d\n", scale0, scale1);	
@@ -216,16 +225,18 @@ void mon_or(void)
 
 
 /* 
- * ADC and AGC levels 
+ * Bias and Levels 
  */
-extern volatile int32_t  rx_agc;
-extern volatile int adccnt;
+extern volatile uint16_t rx_agc, tx_agc;
+extern volatile uint16_t adc_bias[3];
 void mon_adc(void)
 {
 	// Print results
-	printf("RSSI: %5u\n", s_rssi);
-	printf("AGC : %5d\n", rx_agc);
-	printf("ADCc: %5d\n", adccnt);
+	printf("Bias  : %u, %u, %u\n", adc_bias[0], adc_bias[1], adc_bias[2]);
+	printf("RSSI  : %5u\n", GET_RSSI_LEVEL);
+	printf("VOX   : %5u\n", GET_VOX_LEVEL);
+	printf("RX-AGC: %5u\n", rx_agc);
+	printf("TX-AGC: %5u\n", tx_agc);
 }
 
 
@@ -309,8 +320,15 @@ void mon_evaluate(void)
 		break;
 	case LF:
 		break;										// Ignore, assume CR as terminator
+	case BS:
+		if (i>0) i--;								// One position back
+		mon_cmd[i] = SP;							// Replace with whitespace
+		putchar(BS);								// Erase sequence
+		putchar(SP);
+		putchar(BS);
+		break;
 	default:
-		if ((c<32)||(c>=128)) break;				// Only allow alfanumeric
+		if ((c<32)||(c>=127)) break;				// Only allow alphanumeric
 		putchar((char)c);							// Echo character
 		mon_cmd[i] = (char)c;						// store in command string
 		if (i<CMD_LEN) i++;							// check range and increment

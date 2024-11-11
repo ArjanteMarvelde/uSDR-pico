@@ -6,7 +6,12 @@
  *
  * Driver for the SI5351A VCO
  *
+ * Provides 
+ * - VFO0, two outputs on clk0 and clk1 with configurable phase difference
+ * - VFO1, auxiliary single output on clk2
  
+ 
+
 Si5351 principle of operation:
 ==============================
 Crystal frequency Fxtal (usually 25MHz) is multiplied in a PLL by MSN to obtain Fvco.
@@ -223,8 +228,6 @@ void si_setphase(int i, uint8_t p)
 {
 	if (i!=0) return;														// Check VFO range
 	if (p>3) return;														// Check phase range
-	if (vfo[i].phase == p) return;											// Anything to set at all?
-	
 	vfo[i].phase = p; 														// Entry checks pass, so do the actual setting
 }
 
@@ -239,9 +242,9 @@ void si_enable(int i, bool en)
 	i2c_read_blocking(i2c0, I2C_VFO, &data[1], 1, false);
 
 	if (i==0)
-		data[1] = en ? data[1]&~SI_VFO0_DISABLE : data[1]|SI_VFO0_DISABLE;	// clk0 and clk1
+		data[1] = (en ? data[1]&~SI_VFO0_DISABLE : data[1]|SI_VFO0_DISABLE);	// clk0 and clk1
 	else
-		data[1] = en ? data[1]&~SI_VFO1_DISABLE : data[1]|SI_VFO1_DISABLE;	// clk2
+		data[1] = (en ? data[1]&~SI_VFO1_DISABLE : data[1]|SI_VFO1_DISABLE);	// clk2
 	i2c_put_data(i2c0, I2C_VFO, &data[0], 2, false);
 }
 
@@ -402,14 +405,18 @@ void si_setmsi(int i)
  * else, 
  *	recalculate MSi and Ri as well
  *	set MSN, MSi and Ri registers (implicitly resets PLL)
+ * Returns:
+ *  -1 range error
+ *   0 nothing to do
+ *   1 frequency set
  */
-void si_evaluate(int i, uint32_t freq)
+int si_evaluate(int i, uint32_t freq)
 {
 	double   msn;
 	uint32_t fvco;
 
-	if ((i<0)||(i>1)) return;												// Check VFO range
-	if (vfo[i].freq == freq) return;										// Nothing to do
+	if ((i<0)||(i>1)) return(-1);											// Check VFO range
+	if (vfo[i].freq == freq) return(0);										// Nothing to do
 	
 	
 	fvco = freq*vfo[i].msi;													// Required Fvco
@@ -435,13 +442,15 @@ void si_evaluate(int i, uint32_t freq)
 		msn = msn * (double)(vfo[i].freq) / SI_XTAL_FREQ;
 		vfo[i].msn = msn;
 		
-		vfo[i].phase = (i==1)?PH000:PH090;									// Hard coded phase
+		vfo[i].phase = (i==1)?PH000:PH270;									// Hard coded phase
 		
 		si_setmsn(i);
 		si_setmsi(i);
 	}
 	
 	vfo[i].freq = freq;														// Adopt new freq
+	
+	return(1);
 }
 
 
@@ -466,7 +475,7 @@ void si_init(void)
 			
 	// Initialize VFO values
 	vfo[0].freq  = 7074000;
-	vfo[0].phase = PH090;
+	vfo[0].phase = PH270;
 	vfo[0].ri    = 1;
 	vfo[0].msi   = 106;
 	vfo[0].msn   = ((double)vfo[0].freq*vfo[0].msi)/(double)SI_XTAL_FREQ;

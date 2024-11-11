@@ -42,7 +42,7 @@ int  si_getvfo(int i, vfo_t *v);
 void si_setphase(int i, uint8_t p);
 void si_enable(int i, bool en);
 void si_init(void);
-void si_evaluate(int i, uint32_t freq);
+int  si_evaluate(int i, uint32_t freq);
 
 
 #endif /* _SI5351_H */
