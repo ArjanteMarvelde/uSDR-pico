@@ -1,4 +1,4 @@
-*Note*: The new V4.00 is available in DRAFT:  
+*Note*: The new V4.0 is available in DRAFT:  
 - Integrated audio on the CPU board  
 - Moved VFO to Mixer board  
 - Applied different way to derive FST3253 clocks, no longer dependent on 90 deg phasing of VFO  
@@ -11,9 +11,10 @@
 - No more RS232, replaced with USB interface which can also be used for programming  
 - Recalculated all filters  
 
-The schematics are now available in KiCAD format, so open for all to adapt. In the package I included a library with some dedicated definitions.  
+The V4.0 schematics are now available in KiCAD format, so open for all to adapt. In the package I included a library with some dedicated definitions.  
 
 Still to be done:  
+- Debug hardware, patch and publish V4.1  
 - All software updates, this will take place after assembly of the hardware  
 - Update all documentation to be consistent with the actual implementation  
 
@@ -70,7 +71,7 @@ The PCB files have been made with Eagle 5.11, and can be modified or otherwise r
 
 # Background
 The folder **$PICO/docs** also contains some manuals, of which the *C-SDK description*, the *RP2040 datasheet* and the *Pico Pinout* are absolute must-reads when you start writing software. Note that this folder is only created by the **ndabas** script, after manual installation you should find these on the Raspberry website.  
-For calculating filters I have used the free software from [Iowa Hills](http://www.iowahills.com/8DownloadPage.html) (website has been down for a while)  
+For calculating filters I have used the free software from [Iowa Hills](http://www.iowahills.com/8DownloadPage.html) (website has been down for a while, but files can be found using [Wayback Machine]( https://web.archive.org/web/20210819042054/http://www.iowahills.com/8DownloadPage.html))  
 I also used the online FIR filter calculator [T-Filter](http://t-filter.engineerjs.com/) 
 
 # Copyright notice
