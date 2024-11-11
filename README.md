@@ -1,23 +1,20 @@
-*Note*: The new V4.0 is available in DRAFT:  
+The new V4.00 is now available:  
 - Integrated audio on the CPU board  
-- Moved VFO to Mixer board  
-- Applied different way to derive FST3253 clocks, no longer dependent on 90 deg phasing of VFO  
+- Moved VFO to Mixer board    
 - Use discrete MMIC for LNA on RX board  
 - New low power TX board  
 - New layout BPF board  
 - Proper bus connectors for all 5 boards,  
 - Increased board size: 2" x 3.7", with the bus connectors this enables a cleaner stack  
-- LCD graphical display (ILI9341 based 320x240)  
+- LCD graphical display (ILI9341 based: 320x240)  
 - No more RS232, replaced with USB interface which can also be used for programming  
 - Recalculated all filters  
 
-The V4.0 schematics are now available in KiCAD format, so open for all to adapt. In the package I included a library with some dedicated definitions.  
+The V4.00 schematics are now available in KiCAD format, so open for all to adapt. In the package I included a library with some dedicated definitions. Note that there are some patches needed to make things functional. These are described in the documentation. New software to run on this upgrade is also available as a package. Please update your SDK before building.
 
 Still to be done:  
-- Debug hardware, patch and publish V4.1  
-- All software updates, this will take place after assembly of the hardware  
-- Update all documentation to be consistent with the actual implementation  
-
+- Publish V4.10  
+- More software updates   
 
 # uSDR-pico
 This Git repository contains a Micro-SDR implementation, based on a RP2040 Pi Pico.  
@@ -39,7 +36,8 @@ The Pico controls an Si5351A clock module to obtain the switching clock for the 
 The display is a standard 16x2 LCD, but with an I2C interface. The display is connected through the other I2C channel, as well as the bus expanders for controlling the various relays.
 
 ## Open issues: 
-- [ ] all SW to be improved and tested on new v4 HW   
+- [ ] all SW to be tested on new v4.10 HW
+- [ ] add simple waterfall over the 7.8kHz FFT band, as tuning assist  
 - [ ] upgrade SDK and HW to the Pico 2 board
  
 
