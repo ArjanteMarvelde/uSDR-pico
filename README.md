@@ -1,4 +1,4 @@
-![uSDR-Pico 4](./doc/uSDR-Pico 4.jpg?raw=true)
+![uSDR-Pico 4](http://./doc/uSDR-Pico 4.jpg)
 The new V4.00 is now available:  
 - Integrated audio on the CPU board  
 - Moved VFO to Mixer board    
