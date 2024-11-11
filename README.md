@@ -1,4 +1,4 @@
-![uSDR-Pico 4](https://github.com/ArjanteMarvelde/uSDR-pico/main/doc/uSDR-Pico4.jpg)  
+![uSDR-Pico 4](https://github.com/ArjanteMarvelde/uSDR-pico/blob/main/doc/uSDR-Pico-4.jpg)  
 
 The new V4.00 is now available:  
 - Integrated audio on the CPU board  
