@@ -145,7 +145,7 @@ bool hmi_update;															// HMI values were updated
 
 
 // FSM function doing nothing
-void hmi_nop(int){};
+void hmi_nop(int event){};
 
 
 // Handle events when in TUN state
