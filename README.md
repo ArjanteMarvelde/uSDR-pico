@@ -55,7 +55,7 @@ Doing it manually, first download the latest release installer, for Windows 10 o
 Create a folder **$PICO**.  
 Clone/copy the uSDR-pico code files into **$PICO/uSDR-pico**.  
 Create the build folder: **$PICO/uSDR-pico/build**  
-Edit **CMakeLists.txt** to have the correct environment parameter *PICO_SDK_PATH*. Normally this will be "C:/Program Files/Raspberry Pi/Pico SDK v1.5.1/pico-sdk". 
+Edit **CMakeLists.txt** to have the correct environment parameter *PICO_SDK_PATH*. Normally this will be "C:/Program Files/Raspberry Pi/Pico SDK v1.5.1/pico-sdk".  
 *Note* that every time you change something in **CMakeLists.txt** (like adding another source file to the build) you will have to clean the build folder and re-issue cmake.  
  
 All building is using Ninja, which has to be done from a **VS Developer Command Prompt for Pico** (*DCP*) because it sets up the proper build environment. A shortcut to *DCP* is found in the Start menu under the Raspberry Pi Pico SDK folder, and it is best to copy a shortcut in a more convenient place. Then the *startup folder* property of the shortcut can be changed to for example **$PICO**.   
