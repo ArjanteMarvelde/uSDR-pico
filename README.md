@@ -52,7 +52,7 @@ Doing it manually, first download the latest release installer, for Windows 10 o
   
   
 ## Building uSDR-pico:    
-Create a folder **$PICO/uSDR-pico**.  
+Create a folder **$PICO**.  
 Clone/copy the uSDR-pico code files into **$PICO/uSDR-pico**.  
 Create the build folder: **$PICO/uSDR-pico/build**  
 Edit **CMakeLists.txt** to have the correct environment parameter *PICO_SDK_PATH*. Note that every time you change something in **CMakeLists.txt** (like adding another source file to the build) you will have to clean the build folder and re-issue cmake.  
