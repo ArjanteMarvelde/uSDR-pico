@@ -52,17 +52,17 @@ typedef struct _tFont
   char		Last;		// Last Character
 } sFONT;
 
-extern sFONT Font24;
-extern sFONT Font20;
-extern sFONT Font16;
-extern sFONT Font8;
-extern sFONT Font7SPP;
-extern sFONT FontUB;
-extern sFONT FontUBB;
-extern sFONT FontAR;
-extern sFONT FontGR;
-extern sFONT FontSYM;
-extern sFONT FontSYMs;
+extern sFONT Font8;		// Courier 5x8
+extern sFONT Font16;	// Courier 12x16
+extern sFONT Font20;	// Courier 14x20
+extern sFONT Font24;	// Courier 17x24
+extern sFONT Font7SPP;	// 7 Segments plus
+extern sFONT FontUB;	// Ubuntu 24x32
+extern sFONT FontUBB;	// Ubuntu bold 24x32
+extern sFONT FontAR;	// Arial Round 16x24
+extern sFONT FontGR;	// Grotesk 16x32
+extern sFONT FontSYMs;	// Various symbols 16x16
+extern sFONT FontSYM;	// Various symbols 32x32
 
   
 #endif /* __FONTS_H */

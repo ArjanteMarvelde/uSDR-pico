@@ -311,7 +311,7 @@ int __not_in_flash_func(fix_fft)(int16_t *fr, int16_t *fi, bool inverse)
 
 
 #ifdef BLAH
-// int16_t contains signed fixed point representation Q(1,14)
+// int16_t contains signed fixed point representation Q(2,14)
 // 1 sign bit, 1 int bit and 14 frac bits
 // precomputed value K represents 0.5
 #define Q	14

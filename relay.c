@@ -45,7 +45,10 @@ int relay_getband(void)
 	uint8_t data[2];
 	int ret;
 	
+	data[0] = 0;
 	ret = i2c_get_data(i2c0, I2C_BPF, data, 1, false);
+	if (ret<0) 
+		ret = i2c_get_data(i2c0, I2C_BPF, data, 1, false);
 	if (ret>=0) 
 		ret=data[0];
 	return(ret);
@@ -66,7 +69,10 @@ int relay_getattn(void)
 	uint8_t data[2];
 	int ret;
 	
+	data[0] = 0;
 	ret = i2c_get_data(i2c0, I2C_RX, data, 1, false);
+	if (ret<0) 
+		ret = i2c_get_data(i2c0, I2C_RX, data, 1, false);
 	if (ret>=0) 
 		ret=data[0];
 	return(ret);

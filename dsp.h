@@ -35,9 +35,10 @@
 
 
 /** DSP module interface **/
-extern volatile uint16_t dsp_rssi, dsp_vox;
-#define GET_RSSI_LEVEL	(dsp_rssi)
-#define GET_VOX_LEVEL	(dsp_vox)
+
+extern volatile uint32_t dsp_rssi, dsp_vox;	// Fixed point UQ16.16
+#define GET_RSSI_LEVEL	(uint16_t)(dsp_rssi>>16)
+#define GET_VOX_LEVEL	(uint16_t)(dsp_vox>>16)
 int get_sval(void);
 
 extern volatile bool tx_enabled;			// Determined by (vox_active || ptt_active)

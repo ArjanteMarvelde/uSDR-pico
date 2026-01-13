@@ -173,10 +173,7 @@ void mon_bp(void)
 	}
 	sleep_ms(1);
 	ret = relay_getband();
-	if (ret<0)
-		printf ("I2C read error\n");
-	else
-		printf("%02x\n",  ret);
+	printf("BPF relays: %02x\n",  ret);
 }
 
 /*
@@ -196,11 +193,7 @@ void mon_rx(void)
 	}
 	sleep_ms(1);
 	ret = relay_getattn();
-	if (ret<0)
-		printf ("I2C read error\n");
-	else
-		printf("%02x\n", ret);
-	
+	printf("Pre-amp relays: %02x\n", ret);
 }
 
 /* 
@@ -215,10 +208,10 @@ extern volatile int scale1;
 #endif
 void mon_or(void)
 {
-	printf("ADCc  : %5d\n", adccnt);
-	printf("DSP overruns   : %ld\n", dsp_overrun);
+	printf("ADCcnt        : %d\n", adccnt);
+	printf("DSP overruns  : %ld\n", dsp_overrun);
 #if DSP_FFT == 1
-	printf("DSP loop load  : %lu%%\n", (100*dsp_tickx)/512);	
+	printf("DSP loop load : %lu%%\n", (100*dsp_tickx)/512);	
 	printf("FFT scale = %d, iFFT scale = %d\n", scale0, scale1);	
 #endif
 }
@@ -227,7 +220,7 @@ void mon_or(void)
 /* 
  * Bias and Levels 
  */
-extern volatile uint16_t rx_agc, tx_agc;
+extern volatile uint16_t if_agc, rx_agc, tx_agc;
 extern volatile uint16_t adc_bias[3];
 void mon_adc(void)
 {
@@ -235,6 +228,7 @@ void mon_adc(void)
 	printf("Bias  : %u, %u, %u\n", adc_bias[0], adc_bias[1], adc_bias[2]);
 	printf("RSSI  : %5u\n", GET_RSSI_LEVEL);
 	printf("VOX   : %5u\n", GET_VOX_LEVEL);
+	printf("IF-AGC: %5u\n", if_agc);
 	printf("RX-AGC: %5u\n", rx_agc);
 	printf("TX-AGC: %5u\n", tx_agc);
 }

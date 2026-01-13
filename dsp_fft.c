@@ -110,7 +110,10 @@ volatile uint32_t dsp_tickx  = 0;											// Load indicator DSP loop
 
 
 /*
- * Shift center frequency back to DC by multiply samples with e(-j*w*t)
+ * Downshift frequency with Fs/4 = Fc
+ * SEE: Lyons, Understanding DSP, CHAPTER 13.1.2
+ *
+ * Shift center frequency back to DC by multipling time domain samples with e(-j*w*t)
  * w = 2*pi*f, where f is FC_OFFSET (3906Hz)
  * t = n*Ts, where Ts is 1/S_RATE (1/15625Hz)
  * So the exponent becomes n*2*pi*FC_OFFSET/S_RATE = n*pi/2 (since FC_OFFSET = S_RATE/4)
@@ -136,6 +139,9 @@ void __not_in_flash_func(dsp_shift)(void)
 }
 
 /*
+ * NOTE THAT FLTERING SHOULD REALLY BE DONE BY MULTIPLY WITH FFT OF FILTER IMPULSE RESPONSE
+ * SEE: The Scientist and Engineer's Guide to Digital Signal Processing, CHAPTER 18
+ *
  * This applies a bandpass filter to XI and XQ buffers
  * lowbin and highbin edges must be between 3 and FFT_SIZE/2 - 3
  * Edge is a 7 bin raised cosine flank, i.e. 100Hz wide
@@ -143,7 +149,7 @@ void __not_in_flash_func(dsp_shift)(void)
  *    where the edge bin is in the center of this flank
  * Note: maybe make slope less steep, e.g. 9 or 11 bins 
  *   ____                      ____
- * _/    \____________________/    \_
+ * _/USB0\____________________/LSB0\_
  * [-------|-------][-------|-------]
  * ^                ^               ^
  * 0                BUFSIZE         FFTSIZE
@@ -166,15 +172,18 @@ void __not_in_flash_func(dsp_bandpass)(int lowbin, int highbin, int sidebands)
 	hi2 = FFT_SIZE-lowbin+2;
 
 	// Null all bins excluded from passbands
-	// Calculate edges as raised cosine
+	// Calculate filter edges as raised cosine
 	XI_buf[0] = 0; XQ_buf[0] = 0; 											// Block DC
-	for (i=1; i<lo1; i++)          { XI_buf[i] = 0; XQ_buf[i] = 0; }
+	
+	for (i=1; i<lo1; i++)													// Block until low filter side
+		{ XI_buf[i] = 0; XQ_buf[i] = 0; }
 
-	if (sidebands==DSP_PASS_LSB)											// LSB only: block USB
+	if (sidebands==DSP_PASS_LSB)
 	{
-		for (i=lo1; i<lo2; i++) { XI_buf[i] = 0; XQ_buf[i] = 0; }
+		for (i=lo1; i<lo2; i++) 											// LSB only: block USB bins
+			{ XI_buf[i] = 0; XQ_buf[i] = 0; }
 	}
-	else
+	else 																	// USB or DSB: apply filter curve
 	{
 		i=lo1;
 		XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i++;
@@ -189,13 +198,15 @@ void __not_in_flash_func(dsp_bandpass)(int lowbin, int highbin, int sidebands)
 		XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i--;
 		XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933;
 	}
-	for (i=lo2+1; i<hi1; i++)      { XI_buf[i] = 0; XQ_buf[i] = 0; }
+	for (i=lo2+1; i<hi1; i++)												// Block unused negative freq bins
+		{ XI_buf[i] = 0; XQ_buf[i] = 0; }
 
-	if (sidebands==DSP_PASS_USB)											// USB only: block LSB
+	if (sidebands==DSP_PASS_USB)
 	{
-		for (i=hi1; i<hi2; i++) { XI_buf[i] = 0; XQ_buf[i] = 0; }
+		for (i=hi1; i<hi2; i++) 											// USB only: block LSB bins
+		{ XI_buf[i] = 0; XQ_buf[i] = 0; }
 	}
-	else
+	else																	// LSB or DSB: apply filter curve
 	{
 		i=hi1;
 		XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i++;
@@ -210,7 +221,8 @@ void __not_in_flash_func(dsp_bandpass)(int lowbin, int highbin, int sidebands)
 		XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i--;
 		XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933;
 	}
-	for (i=hi2+1; i<FFT_SIZE; i++) { XI_buf[i] = 0; XQ_buf[i] = 0; }
+	for (i=hi2+1; i<FFT_SIZE; i++) 												// Block from high filter side
+		{ XI_buf[i] = 0; XQ_buf[i] = 0; }
 }
 
 
@@ -251,34 +263,32 @@ bool __not_in_flash_func(rx)(void)
 		*xqp++ = *qp++;
 	}
 
-	dsp_shift();															// Downshift samples by FC_OFFSET
+	/*** Downshift time samples with FC_OFFSET ***/
+	dsp_shift();															// In effect Fc moves to DC
 	
 	/*** Execute FFT ***/
-	scale0 = fix_fft(&XI_buf[0], &XQ_buf[0], false);						// Frequency domain filter input
-	
+	scale0 = fix_fft(&XI_buf[0], &XQ_buf[0], false);						// Conversion to frequency domain 
 	
 	/*** Shift and filter sidebands ***/
-	// At this point USB and LSB surround DC
-	// The desired sidebands must be shifted to their target positions around 0
-	// [-------|-------][-------|-------]
-	//  USB0                        LSB0
+	// At this point positive USB0 and LSB0 surround DC
+	// [USB0---|---USB1][LSB1---|---LSB0]
 	switch (dsp_mode)
 	{
 	case MODE_USB:
-		// Bandpass USB
+		// [USB0---|-------][-------|-------]
 		dsp_bandpass(BIN_100, BIN_3000, DSP_PASS_USB);
 		break;
 	case MODE_LSB:
-		// Bandpass LSB
+		// [-------|-------][-------|---LSB0]
 		dsp_bandpass(BIN_100, BIN_3000, DSP_PASS_LSB);
 		break;
 	case MODE_AM:
-		// Bandpass DSB (LSB + USB)
+		// [USB0---|-------][-------|---LSB0]
 		dsp_bandpass(BIN_100, BIN_3000, DSP_PASS_DSB);
 		break;
 	case MODE_CW:
 		// Bandpass CW, 600Hz
-		dsp_bandpass(BIN_900-BIN_300, BIN_900+BIN_300, 0);
+		dsp_bandpass(BIN_900-BIN_300, BIN_900+BIN_300, DSP_PASS_USB);
 		break;
 	}
 

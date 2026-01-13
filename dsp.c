@@ -89,12 +89,11 @@ void dsp_setmode(int mode)
 #define S2		4
 #define S1		2
 
-#define LSH 	8															// Level SHift for level LPF: 2^LSH
-
-volatile uint16_t dsp_rssi, dsp_vox;										// Signal levels for IF and Audio ADC channels, fixed point (<<16)
+#define LSH				12													// LPF  SHift coefficient for level measurement
+volatile uint32_t dsp_rssi, dsp_vox;										// Signal levels for IF and Audio ADC channels (fixed point 16.16)
 int get_sval(void)
 {
-	uint32_t sval = GET_RSSI_LEVEL;
+	uint32_t sval = GET_RSSI_LEVEL;											// Make local copy to prevent access glitches
 	if (sval>S940) return(94);												// Return max 2 digits!
 	if (sval>S930) return(93);
 	if (sval>S920) return(92);
@@ -124,6 +123,7 @@ int get_sval(void)
 #define AGC_SHORT	64
 #define AGC_LONG	4096
 #define AGC_DIS		32766
+#define IFAGC_TOP	1023
 #define RXAGC_TOP	2047
 #define TXAGC_TOP	2047
 volatile uint16_t agc_decay  = AGC_DIS;
@@ -263,19 +263,18 @@ inline uint16_t mag(int16_t i, int16_t q)
 
 /*
  * The dma_handler is called when the sample buffer adc_sample[][] is full.
- * It only stops ADC conversions and resets DMA interrupt flag, samples are processed in timeout dsp_callback routine.
+ * It only stops the ADC conversions and resets DMA interrupt flag, samples are processed in timeout dsp_callback routine.
  */
 #define CH0			0
 #define DMA_CTRL0	0x00120027
-volatile int      adccnt = 0;												// Sampling overflow indicator, negative when timeout is too soon
+volatile int      adccnt = 0;												// Sampling overflow indicator, negative when timeout is too early
 void __not_in_flash_func(dma_handler)(void)
 {
-	adccnt++;																// ADC overrun indicator increment
 	adc_run(false);															// Stop freerunning ADC
 	dma_hw->ints0 = 1u << CH0;												// Clear the interrupt request.
+	adccnt++;																// ADC overrun indicator increment
 	//while (!adc_fifo_is_empty()) adc_fifo_get();							// Empty leftovers from fifo
 }
-
 
 
 
@@ -283,34 +282,37 @@ void __not_in_flash_func(dma_handler)(void)
 
 /*
  * This runs every TIM_US, i.e. 64usec, and hence determines the actual sample rate
- * The filtered samples are set aside, so a new ADC cycle can be started. 
+ * The samples are saved after filtering, so a new ADC cycle can be started. 
  * One ADC cycle takes 6usec to complete (3x ADC0..2) + 1x 2usec stray ADC0 conversion.
  * The timing is critical, it assumes that the ADC is finished.
- * --> Do not put any other stuff in this callback routine that affects timing
+ * --> Do not put any other stuff in this callback routine that may affect timing
  */
 
-#define ADC_INT		8														// Nr of samples for integration (use 8=2^3)
-#define BSH			8														// Bias SHift for moving average; 2^BSH
-#define DC_LEN		(1<<BSH)												// Length of DC level delay line (initially all ADC_BIAS)
+#define ADC_INT		6														// Nr of samples for integration (use 8=2^3)
+#define BSH			8														// Bias SHift size for the moving average; length is  2^BSH
+#define DC_LEN		(1<<BSH)												// Length of DC level delay line (initial values: ADC_BIAS)
 #define SUM_BIAS	(ADC_BIAS*DC_LEN)										// Sum of samples in delay line (initially DC_LEN*ADC_BIAS)
+#define MED_LEN		3														// Median filter length
 volatile uint16_t adc_sample[ADC_INT][3];									// ADC sample buffers, filled by DMA (one per channel)
 volatile uint16_t adc_movavg[DC_LEN][3];									// ADC DC level running average sample delay lines
 volatile uint32_t adc_sumbias[3] = {SUM_BIAS, SUM_BIAS, SUM_BIAS};			// ADC dynamic bias (DC) level, summed delay line
 volatile uint16_t adc_bias[3] = {ADC_BIAS, ADC_BIAS, ADC_BIAS};				// ADC dynamic bias (DC) level
 volatile int16_t  adc_result[3];											// Pre-processed sample, for each channel
-volatile int      adc_i = 0;												// Points into delay line
-volatile uint16_t rx_agc = 1, tx_agc = 1;									// Factor as AGC
+volatile int      adc_k = 0;												// Points into lowpass delay line
+volatile uint16_t if_agc = 1, rx_agc = 1, tx_agc = 1;						// Factor as level adjustment (IF, RX audio, TX audio)
 
 semaphore_t dsp_sem;														// Semaphore to trigger dsp loop
 repeating_timer_t dsp_timer;												// TIM_US timer
 bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t) 				// Timer callback routine
 {
-	uint32_t temp;
+	int32_t temp;
 	
-	/** Here the rate is: S_RATE=1/TIM_US, --> 15625Hz **/
+	/** The call-rate of this function = resulting sample rate: S_RATE=1/TIM_US, --> 15625Hz **/
 
-	// Add up the ADC_INT samples for each channel, after removing DC
-	// Increase dynamic range, implicit LPF, maybe better use proper filter coefficients
+	// Integration and DC bias removal
+	// Adds ADC_INT samples for each channel, after first removing DC bias
+	//    this implicitly converts from unsigned to signed int 
+	// Summaton increases dynamic range and has implicit LPF (but it may be better to use proper filter coefficients)
 	adc_result[CH_Q] = 0;
 	adc_result[CH_I] = 0;
 	adc_result[CH_A] = 0;
@@ -321,41 +323,57 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t) 				// Timer callba
 		adc_result[CH_A] += (int16_t)(adc_sample[temp][CH_A]) - adc_bias[CH_A];
 	}
 	
-	// Calculate new bias / sumbias values and replace sample in delay line
-	adc_sumbias[CH_Q] += adc_sample[0][CH_Q] - adc_movavg[adc_i][CH_Q]; adc_bias[CH_Q] = adc_sumbias[CH_Q]>>BSH;
-	adc_sumbias[CH_I] += adc_sample[0][CH_I] - adc_movavg[adc_i][CH_I]; adc_bias[CH_I] = adc_sumbias[CH_I]>>BSH;
-	adc_sumbias[CH_A] += adc_sample[0][CH_A] - adc_movavg[adc_i][CH_A]; adc_bias[CH_A] = adc_sumbias[CH_A]>>BSH;
-	adc_movavg[adc_i][CH_Q] = adc_sample[0][CH_Q];
-	adc_movavg[adc_i][CH_I] = adc_sample[0][CH_I];
-	adc_movavg[adc_i][CH_A] = adc_sample[0][CH_A];
-	if (++adc_i >= DC_LEN) adc_i = 0;
+	// Low pass filtering, based on running average.
+	// Store sample history in movavg, sumbias = SUM(movavg[]), length of movavg is 2^BSH so bias = sumbias>>BSH
+	// Calculate new bias / sumbias values and replace sample in movavg delay line
+	adc_sumbias[CH_Q] += adc_sample[0][CH_Q] - adc_movavg[adc_k][CH_Q]; adc_bias[CH_Q] = adc_sumbias[CH_Q]>>BSH;
+	adc_sumbias[CH_I] += adc_sample[0][CH_I] - adc_movavg[adc_k][CH_I]; adc_bias[CH_I] = adc_sumbias[CH_I]>>BSH;
+	adc_sumbias[CH_A] += adc_sample[0][CH_A] - adc_movavg[adc_k][CH_A]; adc_bias[CH_A] = adc_sumbias[CH_A]>>BSH;
+	adc_movavg[adc_k][CH_Q] = adc_sample[0][CH_Q];
+	adc_movavg[adc_k][CH_I] = adc_sample[0][CH_I];
+	adc_movavg[adc_k][CH_A] = adc_sample[0][CH_A];
+	if (++adc_k >= DC_LEN) adc_k = 0;
 
-	// Kick-off a new acquisition phase
-	// So restart ADCs and DMA channel
+	// Raw samples no longer needed, so kick-off a new acquisition phase
+	// Restart the ADCs and the DMA channel
 	adc_select_input(0);													// Start with ADC0
 	while (!adc_fifo_is_empty()) adc_fifo_get();							// Empty leftovers from fifo, if any
-
 	dma_hw->ch[CH0].read_addr = (io_rw_32)&adc_hw->fifo;					// Read from ADC FIFO
 	dma_hw->ch[CH0].write_addr = (io_rw_32)&adc_sample[0][0];				// Write to sample buffer
 	dma_hw->ch[CH0].transfer_count = ADC_INT * 3;							// Nr of 16 bit words to transfer
 	dma_hw->ch[CH0].ctrl_trig = DMA_CTRL0;									// Write ctrl word while starting the DMA
 	adc_run(true);															// Start the ADC too
-	adccnt--;																// ADC overrun indicator decrement
-
-	// Derive RSSI value from RX vector length
-	// Crude AGC mechanism **NEEDS TO BE IMPROVED**
+	adccnt--;																// ADC overrun indicator decrement	
+	
+	/*
+	 * Add I-Q results to median delay line
+	 * Calculate amplitude and add to delay line
+	 * Choose median amplitude entry for further processing  
+	 */
+	// Derive RSSI level from IF sample vector length
+	// This value is taken through an IIR low-pass filter: 
+	//   y(n) = y(n-1) + (x(n) - y(n-1)>>b)
+	//   RC = ((1<<b)-1)*64us
+	//   Before using the value: y >> b. 
+	// Then determine IF AGC wrt to top level
 	if (!tx_enabled)	
 	{
 		temp = mag(adc_result[CH_I], adc_result[CH_Q]);						// Approximate amplitude, with alpha max + beta min function
-		temp = MAX(1,temp);													// Prevent 0 level
-		dsp_rssi += (temp - dsp_rssi) >> LSH;								// Promote temp to fixed point, then LPF
-		
-		rx_agc = RXAGC_TOP/GET_RSSI_LEVEL;									// Calculate scaling factor (max level/actual level)
-		if (rx_agc==0) rx_agc=1;											// Shouldn't ever happen
+		temp = (MAX(1,temp));											    // Prevent 0 level
+		temp = (temp<<16) - dsp_rssi;										// Promote amplitude to Q16.16 and calculate delta
+		dsp_rssi += temp>>LSH;												// LPF: RC = (1<<LSH - 1) * 64usec
+/*** This is meant to scale the IF signal. Fairly crude mechanism, should react slower. ***/
+		if (IFAGC_TOP/GET_RSSI_LEVEL > if_agc )
+			if_agc++;														// Increment factor when signal smaller than desired
+		else
+			if_agc--;														// Decrement when larger
+		if (if_agc==0) if_agc=1;											// Should never happen
 	}
 	
-	// Calculate VOX level
-	dsp_vox += (ABS(adc_result[CH_A]) - dsp_vox) >> LSH;					// Running average of audio input level
+	// Derive VOX level from Audio sample amplitude
+	temp = ABS(adc_result[CH_A]);											// Take absolute amplitude 
+	temp = (temp<<16) - dsp_vox;											// Promote to fixed point format (Q16.16), calculate delta
+	dsp_vox += temp>>LSH;													// LPF: RC = (1<<LSH - 1) * 64usec
 	tx_agc = TXAGC_TOP/GET_VOX_LEVEL;										// Calculate scaling factor (max level/actual level)
 	if (tx_agc==0) tx_agc=1;												// Shouldn't ever happen
 		
@@ -370,8 +388,11 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t) 				// Timer callba
 	}
 	else
 	{
-		I_buf[dsp_active][dsp_tick] = (int16_t)(rx_agc*adc_result[CH_I]);	// Copy I sample to I buffer
-		Q_buf[dsp_active][dsp_tick] = (int16_t)(rx_agc*adc_result[CH_Q]);	// Copy Q sample to Q buffer
+		I_buf[dsp_active][dsp_tick] = (int16_t)(if_agc*adc_result[CH_I]);	// Copy I sample to I buffer
+		Q_buf[dsp_active][dsp_tick] = (int16_t)(if_agc*adc_result[CH_Q]);	// Copy Q sample to Q buffer
+
+/*** ==> Need to insert RX_AGC mechanism here ***/
+
 		pwm_set_gpio_level(DAC_A, A_buf[dsp_active][dsp_tick] + DAC_BIAS);	// Output A to DAC
 	}
 	
@@ -411,8 +432,8 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t) 				// Timer callba
 
 /** CORE1: DSP loop **/
 /*
- * Background signal processing, 
- * triggered through repeating timer (dsp_callback) and semaphore
+ * Background signal processing, runs every sample collection slot (64us),
+ * triggered by repeating timer (dsp_callback) and semaphore
  * This also initializes all DSP environment
  */
 void __not_in_flash_func(dsp_loop)()

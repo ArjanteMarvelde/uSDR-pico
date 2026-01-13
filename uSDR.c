@@ -40,15 +40,15 @@
 
 int i2c_put_data(i2c_inst_t *i2c, uint8_t addr, const uint8_t *src, size_t len, bool nostop)
 {
-	int r = i2c_write_blocking(i2c, addr, src, len, nostop);
-	sleep_us(I2C_LINGER_US);
+	int r = i2c_write_timeout_us(i2c, addr, src, len, nostop, I2C_XACT_US(len));
+	//sleep_us(I2C_LINGER_US);
 	return(r);
 }
 
 int i2c_get_data(i2c_inst_t *i2c, uint8_t addr, uint8_t *dst, size_t len, bool nostop)
 {
-	int r = i2c_read_blocking(i2c, addr, dst, len, nostop);
-	sleep_us(I2C_LINGER_US);
+	int r = i2c_read_timeout_us(i2c, addr, dst, len, nostop, I2C_XACT_US(len));
+	//sleep_us(I2C_LINGER_US);
 	return(r);
 }
 
@@ -105,13 +105,13 @@ int main()
 	 * spi1 is used for the LCD interface
 	 * Do not invoke i2c functions from interrupt handlers!
 	 */
-	i2c_init(i2c0, 100000);													// i2c0 initialisation at 100 kHz
+	i2c_init(i2c0, I2C0_CLOCK);												// i2c0 initialisation 
 	gpio_set_function(I2C0_SDA, GPIO_FUNC_I2C);
 	gpio_set_function(I2C0_SCL, GPIO_FUNC_I2C);
 	gpio_pull_up(I2C0_SDA);
 	gpio_pull_up(I2C0_SCL);
 	
-	spi_init(spi1, 40*1000*1000);											// spi1 initialisation at 40 MHz
+	spi_init(spi1, SPI1_CLOCK);												// spi1 initialisation at 40 MHz
 	gpio_set_function(LCD_CLK, GPIO_FUNC_SPI);
 	gpio_set_function(LCD_MOSI, GPIO_FUNC_SPI);
 	spi_set_format(spi1, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);			// 8 bit transfer, clock idle low, clock rising edge

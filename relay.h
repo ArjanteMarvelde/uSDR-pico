@@ -17,11 +17,11 @@
 #define REL_BPF40	0x10
 
 /* relay_setattn() values */
-#define REL_ATT_30	0x03
-#define REL_ATT_20	0x01
+#define REL_ATT_30	0x06
+#define REL_ATT_20	0x04
 #define REL_ATT_10	0x02
 #define REL_ATT_00	0x00
-#define REL_PRE_10	0x04
+#define REL_PRE_10	0x01
 
 void relay_setband(int val);
 void relay_setattn(int val);

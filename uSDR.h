@@ -80,13 +80,14 @@
 #define I2C_VFO					0x60										// Si5351A
 
 
-/* I2C wrapper functions (blocking write and read) */
-
-#define I2C_LINGER_US			200											// Linger time added after i2c SDK functions
-
+/* I2C settings and wrapper functions (blocking write and read) */
+#define I2C0_CLOCK				(100*1000)									// Clock on i2c bus: 100kHz, cycle=10usec
+#define I2C_XACT_US(x)			((uint)(x)+1)*10*10*2						// Transaction time: 10 bits * cycle * length
 int i2c_put_data(i2c_inst_t *i2c, uint8_t addr, const uint8_t *src, size_t len, bool nostop);
 int i2c_get_data(i2c_inst_t *i2c, uint8_t addr, uint8_t *dst, size_t len, bool nostop);
 
+/* SPI settings */
+#define SPI1_CLOCK				(40*1000*1000)								// Clock on spi1 interface: 40MHz
 
 /* LCD type selection (see also lcd.c) */
 

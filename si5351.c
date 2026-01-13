@@ -419,7 +419,7 @@ int si_evaluate(int i, uint32_t freq)
 	if (vfo[i].freq == freq) return(0);										// Nothing to do
 	
 	
-	fvco = freq*vfo[i].msi;													// Required Fvco
+	fvco = freq*vfo[i].msi*vfo[i].ri;										// Required Fvco
 	if ((fvco>=SI_VCO_LO)&&(fvco<SI_VCO_HI))								// Check MSN range
 	{
 		vfo[i].msn = (double)fvco / SI_XTAL_FREQ;							// Calculate required MSN
@@ -432,7 +432,7 @@ int si_evaluate(int i, uint32_t freq)
 		vfo[i].ri  = (freq<1000000UL)?128:((freq<3000000UL)?32 : 1);
 		
 		// Set MSi
-		if (freq < 6000000UL)												// Handle Low end of Ri=1 range
+		if ((freq < 6000000UL)&&(vfo[i].ri==1))								// Handle Low end of Ri=1 range
 			vfo[i].msi = (uint8_t)126;										// Maximum MSi on Fvco=(4x126)MHz
 		else																// Or calculate MSi on Fvco=750MHz
 			vfo[i].msi = (uint8_t)((700000000UL / (freq * vfo[i].ri)) & 0x000000fe);
