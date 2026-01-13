@@ -14,7 +14,7 @@ The new V4.0 is now available:
 
 The V4.0 schematics are now available in KiCAD format, so open for all to adapt. In the package I included a library with some dedicated definitions. Note that there are some patches needed to make things functional. These are described in the documentation. New software to run on this upgrade is also available as a package. Please update your SDK before building.
 
-The V4.1 SW package is also available. This version only works when the patches on the HW have been made, as described in the [V4.10](https://github.com/ArjanteMarvelde/uSDR-pico/blob/main/doc/uSDR - v4.10.pdf) documentation. 
+The V4.1 SW package is also available. This version only works when the patches on the HW have been made, as described in the [V4.10](https://github.com/ArjanteMarvelde/uSDR-pico/blob/main/doc/uSDR%20-%20v4.10.pdf) documentation. 
 
 Still to be done:   
 - More software updates   
