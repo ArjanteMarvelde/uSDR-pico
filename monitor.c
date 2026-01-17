@@ -163,15 +163,15 @@ void mon_bp(void)
 {
 	int ret;
 	
-	if (*argv[1]=='w')
+	if ((nargs > 1) && (*argv[1]=='w'))
 	{
 		if (nargs>2) 
 		{
 			ret = atoi(argv[2]);
 			relay_setband(ret);
 		}
+		sleep_ms(1);
 	}
-	sleep_ms(1);
 	ret = relay_getband();
 	printf("BPF relays: %02x\n",  ret);
 }
@@ -183,15 +183,15 @@ void mon_rx(void)
 {
 	int ret;
 	
-	if (*argv[1]=='w')
+	if ((nargs > 1) && (*argv[1]=='w'))
 	{
 		if (nargs>2) 
 		{
 			ret = atoi(argv[2]);
 			relay_setattn(ret);
 		}
+		sleep_ms(1);
 	}
-	sleep_ms(1);
 	ret = relay_getattn();
 	printf("Pre-amp relays: %02x\n", ret);
 }
