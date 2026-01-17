@@ -16,8 +16,8 @@
 
 
 #define DSP_FFT					1											// Set this to 1 when FFT engine must be used
-#define CH_I					0											// Q channel index for ADC, DAC, etc
-#define CH_Q					1											// I channel index for ADC, DAC, etc
+#define CH_I					0											// I channel index for ADC, DAC, etc
+#define CH_Q					1											// Q channel index for ADC, DAC, etc
 #define CH_A					2											// A channel index for ADC, DAC, etc
 
 
