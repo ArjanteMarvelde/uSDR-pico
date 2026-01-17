@@ -163,7 +163,7 @@ void mon_bp(void)
 {
 	int ret;
 	
-	if (*argv[1]=='w')
+	if (nargs > 1 && *argv[1]=='w')
 	{
 		if (nargs>2) 
 		{
@@ -183,7 +183,7 @@ void mon_rx(void)
 {
 	int ret;
 	
-	if (*argv[1]=='w')
+	if (nargs > 1 && *argv[1]=='w')
 	{
 		if (nargs>2) 
 		{
