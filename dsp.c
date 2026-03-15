@@ -156,8 +156,8 @@ void dsp_setagc(int agc)
  */
 #define VOX_LINGER		500													// 500msec
 
-volatile uint16_t vox_count = 0;
-volatile uint16_t vox_level = 0;
+volatile uint16_t vox_count = 0;											// Linger time in # of samples
+volatile uint16_t vox_level = 0;											// ADC_BIAS is maximum amplitude from ADC
 volatile bool	  vox_active;												// Is set when audio energy > vox level (and not OFF)
 void dsp_setvox(int vox)
 {
@@ -374,7 +374,7 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t) 				// Timer callba
 	temp = ABS(adc_result[CH_A]);											// Take absolute amplitude 
 	temp = (temp<<16) - dsp_vox;											// Promote to fixed point format (Q16.16), calculate delta
 	dsp_vox += temp>>LSH;													// LPF: RC = (1<<LSH - 1) * 64usec
-	tx_agc = TXAGC_TOP/GET_VOX_LEVEL;										// Calculate scaling factor (max level/actual level)
+	tx_agc = TXAGC_TOP/ABS(GET_DSP_VOX);									// Calculate scaling factor (max level/actual level)
 	if (tx_agc==0) tx_agc=1;												// Shouldn't ever happen
 		
 #if DSP_FFT == 1
@@ -432,9 +432,10 @@ bool __not_in_flash_func(dsp_callback)(repeating_timer_t *t) 				// Timer callba
 
 /** CORE1: DSP loop **/
 /*
- * Background signal processing, runs every sample collection slot (64us),
- * triggered by repeating timer (dsp_callback) and semaphore
- * This also initializes all DSP environment
+ * Background signal processing, triggered by semaphore dsp_sem
+ * In Time Domain processing this is released every sample collection slot (64 us),
+ * In Frequency Domain processing this is triggered when buffers are switched (64*512 us) 
+ * This loop also initializes all signal processing variables
  */
 void __not_in_flash_func(dsp_loop)()
 {
@@ -523,7 +524,7 @@ void __not_in_flash_func(dsp_loop)()
 	{
 		sem_acquire_blocking(&dsp_sem);										// Wait until timer-callback releases sem
 
-		// Use dsp_vox value
+		// Compare actual level with set threshold
 		if (vox_level == 0)													// When VOX is disabled
 		{
 			vox_active = false;												//  always de-activate VOX trigger
@@ -531,15 +532,18 @@ void __not_in_flash_func(dsp_loop)()
 		}
 		else																// VOX is enabled
 		{
-			if ((dsp_vox>>LSH) > vox_level)									// AND actual level > limit level
+			if ((GET_DSP_VOX) > vox_level)									// AND actual level > limit level
 			{
-				vox_count = S_RATE * VOX_LINGER / 1000;						//  audio present, reset linger counter
+#if DSP_FFT == 1
+				vox_count = (S_RATE * VOX_LINGER / 1000)/512;				//  audio present, set linger counter
+#else
+				vox_count = S_RATE * VOX_LINGER / 1000;						//  audio present, set linger counter
+#endif
 				vox_active = true;											//  activate VOX trigger 
 			}
-			else if (vox_count>0)											// no audio: 
-				vox_count--;												//  decrement linger counter
-			else
-				vox_active = false;											//  deactivate VOX trigger when linger counter expires
+			else if (vox_active)											// no audio but vox still active 
+				if (--vox_count==0) vox_active = false;						//  deactivate VOX trigger when linger counter expires
+				
 		}
 
 

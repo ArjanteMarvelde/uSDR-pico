@@ -227,7 +227,7 @@ void mon_adc(void)
 	// Print results
 	printf("Bias  : %u, %u, %u\n", adc_bias[0], adc_bias[1], adc_bias[2]);
 	printf("RSSI  : %5u\n", GET_RSSI_LEVEL);
-	printf("VOX   : %5u\n", GET_VOX_LEVEL);
+	printf("VOX   : %5u\n", GET_DSP_VOX);
 	printf("IF-AGC: %5u\n", if_agc);
 	printf("RX-AGC: %5u\n", rx_agc);
 	printf("TX-AGC: %5u\n", tx_agc);
