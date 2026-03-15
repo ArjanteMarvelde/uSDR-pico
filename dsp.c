@@ -524,17 +524,22 @@ void __not_in_flash_func(dsp_loop)()
 		sem_acquire_blocking(&dsp_sem);										// Wait until timer-callback releases sem
 
 		// Use dsp_vox value
-		if (vox_level == 0)													// Only when VOX is enabled
-			vox_active = false;												// De-activate in case it was active
-		else
+		if (vox_level == 0)													// When VOX is disabled
+		{
+			vox_active = false;												//  always de-activate VOX trigger
+			vox_count = 0;													//  and reset linger counter
+		}
+		else																// VOX is enabled
 		{
 			if ((dsp_vox>>LSH) > vox_level)									// AND actual level > limit level
 			{
-				vox_count = S_RATE * VOX_LINGER / 1000;						// While audio present, reset linger timer
-				vox_active = true;											//  and keep TX active
+				vox_count = S_RATE * VOX_LINGER / 1000;						//  audio present, reset linger counter
+				vox_active = true;											//  activate VOX trigger 
 			}
-			else if (--vox_count>0)											// else decrement linger counter
-				vox_active = true;											//  and keep TX active until 0
+			else if (vox_count>0)											// no audio: 
+				vox_count--;												//  decrement linger counter
+			else
+				vox_active = false;											//  deactivate VOX trigger when linger counter expires
 		}
 
 
@@ -550,7 +555,7 @@ void __not_in_flash_func(dsp_loop)()
 		}
 		
 		/** Activate transmission **/
-		tx_enabled = vox_active || ptt_active;								// Either VOX or PTT 	
+		tx_enabled = vox_active || ptt_active;								// VOX or PTT triggered
 
 		dsp_overrun--;														// Decrement overrun counter
 		
