@@ -269,7 +269,7 @@ bool __not_in_flash_func(rx)(void)
 	/*** Execute FFT ***/
 	scale0 = fix_fft(&XI_buf[0], &XQ_buf[0], false);						// Conversion to frequency domain 
 	
-	/*** Shift and filter sidebands ***/
+	/*** Filter sidebands ***/
 	// At this point positive USB0 and LSB0 surround DC
 	// [USB0---|---USB1][LSB1---|---LSB0]
 	switch (dsp_mode)
@@ -303,7 +303,7 @@ bool __not_in_flash_func(rx)(void)
 	ap = &A_buf[b][0]; xip = &XI_buf[BUFSIZE];
 	for (i=0; i<BUFSIZE; i++)
 	{
-		*ap++ = *xip++;														// Copy newest results
+		*ap++ = *xip++;														// Copy newest results (overlap-save method)
 	}
 
 
@@ -437,13 +437,13 @@ bool __not_in_flash_func(tx)(void)
 	ip = &I_buf[b][0]; xip = &XI_buf[BUFSIZE];
 	for (i=0; i<BUFSIZE; i++)
 	{
-		*qp++ = *xqp++;														// Copy newest results
-		*ip++ = *xip++;														// Copy newest results
+		*qp++ = *xqp++;														// Copy newest results (overlap-save method)
+		*ip++ = *xip++;
 	}
 
 
 	/*** Scale down into DAC_RANGE! ***/	
-	peak = 256;
+	peak = 256;																// !!! Why 256 ???
 	for (i=0; i<BUFSIZE; i++)									
 	{
 		Q_buf[b][i] /= peak;		
