@@ -32,8 +32,8 @@
  *  i --> |  |  |  |                                   |  |  |  | --> a
  *        +--+--+--+                                   +--+--+--+
  *            \  \  \     +--+--+                     /  /
- *             ---------> |  |  |                 -------
- *                        +--+--+    FFT-DSP-iFFT 
+ *             ---------> |  |  |                    /  /
+ *                        +--+--+    FFT-DSP-iFFT ------
  *             ---------> |  |  |                    
  *            /  /  /     +--+--+
  *        +--+--+--+
@@ -91,8 +91,8 @@
 int16_t  I_buf[3][BUFSIZE] __attribute__((aligned(4)));						// I sample queue, 3x buffer of FFT_SIZE/2
 int16_t  Q_buf[3][BUFSIZE] __attribute__((aligned(4)));						// Q sample queue, 3x buffer of FFT_SIZE/2
 int16_t  A_buf[3][BUFSIZE] __attribute__((aligned(4)));						// A sample queue, 3x buffer of FFT_SIZE/2
-int16_t XI_buf[FFT_SIZE] __attribute__((aligned(4)));						// Re FFT buffer, 1x buffer of FFT_SIZE
-int16_t XQ_buf[FFT_SIZE] __attribute__((aligned(4)));						// Im FFT buffer, 1x buffer of FFT_SIZE
+int16_t XI_buf[FFT_SIZE]   __attribute__((aligned(4)));						// Re FFT buffer, 1x buffer of FFT_SIZE
+int16_t XQ_buf[FFT_SIZE]   __attribute__((aligned(4)));						// Im FFT buffer, 1x buffer of FFT_SIZE
 
 // Sample buffer indexes, updated by timer callback
 volatile int      dsp_active = 0;											// I, Q, A active buffer number (0..2)
