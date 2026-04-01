@@ -44,19 +44,56 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 - [ ] upgrade SDK and HW to the Pico 2 board
  
 
-## Installing and using the SDK for Windows: 
-For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/raspberrypi/pico-setup-windows). The link [Download the latest release] (https://github.com/raspberrypi/pico-setup-windows/releases/latest/download/pico-setup-windows-x64-standalone.exe) point to a Windows installer for 64-bit processors. I still find VS Code a disaster and use Notepad++ as text editor and the Developer Command Prompt to start cmake and make manually.  
-In case this does not work, please revert to the instructions in the getting started document.  
-
-### Windows installer.  
-Doing it manually, first download the latest release installer, for Windows 10 on a 64 bit PC. During the installation process target directory is asked, I use a directory called Pico in my Documents folder (call it **$PICO**) and install the toolchain in an SDKv1.5.1 subfolder. Everything will end up there, except VS Code, which I don't use anyway.   
-  
+## Installing and using the SDK: 
+Forget about collecting all the tooling manually in Windows, and avoid going through the hassle of keeping all things in sync. Instead, use Ubuntu on WSL (Windows Subsystem for Linux) and use the command line interface to generate your build. You can still edit the source files in Windows e.g. with Notepad++.  
+### Ubuntu on WSL 
+Open Windows Powershell as administrator. 
+- wsl --install  
+then restart windows,  
+if automatic Ubuntu installation fails open Powershell as administrator 
+- wsl.exe --list --online  
+to see the list of distro's  
+- wsl.exe --install [Distro]  
+I have used *Ubuntu-24.04*  
+close Powershell  
+run ubuntu from the Start menu  
+- sudo apt update  
+- sudo apt upgrade  
+- sudo apt install cmake gcc-arm-none-eabi build-essential libnewlib-arm-none-eabi git  
+### Get SDK and other stuff 
+run ubuntu from the Start menu  
+- cd ~  
+- mkdir pico  
+- cd pico  
+- git clone -b master https://github.com/raspberrypi/pico-sdk.git  
+- cd pico-sdk  
+- git submodule update --init   
+- cd ~/pico  
+- git clone -b master https://github.com/raspberrypi/pico-examples.git  
+- cd ~  
+- nano .bashrc  
+add to the end: *export PICO_SDK_PATH=~/pico/pico-sdk*  
+(now the *CMakeLists.txt* file no longer needs to set this)  
+save and exit nano  
+- exit  
+### Test with blink example  
+run ubuntu from the Start menu  
+- cd ~/pico/pico-examples  
+- mkdir build  
+- cd build  
+- cmake ..  
+- cd blink  
+- make  
+### Some hints  
+In Ubuntu the windows C:\ is available under /mnt/c  
+Likewise, the Documents folder: /mnt/c/Users/<user>/Documents  
+Use "explorer.exe ." to open a windows explorer in the current directory  
   
 ## Building uSDR-pico:    
-Create a folder **$PICO**.  
-Clone/copy the uSDR-pico code files into **$PICO/uSDR-pico**.  
+Create a folder **~/pico/uSDR-pico**.  
+Git clone the uSDR-pico code files into **~/pico/uSDR-pico**.  
 Create the build folder: **$PICO/uSDR-pico/build**  
-Edit **CMakeLists.txt** to have the correct environment parameter *PICO_SDK_PATH*. Normally this will be "C:/Program Files/Raspberry Pi/Pico SDK v1.5.1/pico-sdk".  
+Edit **CMakeLists.txt** to have the correct environment parameter *PICO_SDK_PATH*. In line with above installation this will be "~/pico/pico-sdk".  
 *Note* that every time you change something in **CMakeLists.txt** (like adding another source file to the build) you will have to clean the build folder and re-issue cmake.  
  
 All building is using Ninja, which has to be done from a **VS Developer Command Prompt for Pico** (*DCP*) because it sets up the proper build environment. A shortcut to *DCP* is found in the Start menu under the Raspberry Pi Pico SDK folder, and it is best to copy a shortcut in a more convenient place. Then the *startup folder* property of the shortcut can be changed to for example **$PICO**.   
