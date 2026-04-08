@@ -94,8 +94,8 @@ Likewise, the Documents folder: **/mnt/c/Users/<user>/Documents**
 Use "explorer.exe ." to open a windows explorer in the current directory  
   
 ## Building uSDR-pico:    
-In ubuntu, git clone the uSDR-pico files into **~/pico/**, "cd ~/pico; git clone https://github.com/ArjanteMarvelde/uSDR-pico".  
-Create the build folder: "mkdir ~/pico/uSDR-pico/build"  
+In ubuntu, git clone the uSDR-pico files: "cd ~/pico; git clone https://github.com/ArjanteMarvelde/uSDR-pico".  
+Create the build folder: "mkdir ~/pico/uSDR-pico/build".  
 Edit **~/pico/uSDR-pico/CMakeLists.txt** to have the correct environment parameter *PICO_SDK_PATH*, but it should also take it from the environment setting. In line with above installation this will be "~/pico/pico-sdk".  
 Now create the build environment, "cd ~/pico/uSDR-pico/build; cmake ..".  
 *Note* that every time you change something in **CMakeLists.txt** (like adding another source file to the build) you will have to clean the build folder and execute cmake once more: "cd ~/pico/uSDR-pico/build; rm -rf *; cmake ..".   
