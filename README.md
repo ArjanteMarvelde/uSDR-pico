@@ -49,13 +49,15 @@ Forget about collecting all the tooling manually in Windows, and avoid going thr
 ### Ubuntu on WSL 
 Make sure that virtualization is enabled in BIOS  
 open Powershell as administrator  
-- wsl --install   
+- wsl --install
+
 restart computer  
 open Powershell as administrator  
 - wsl.exe --list --online  
 (to see the list of distro's)  
 - wsl.exe --install [Distro]  
-(I have used *Ubuntu-24.04*)  
+(I have used *Ubuntu-24.04*)
+
 exit Powershell  
 run ubuntu from the Start menu  
 - sudo apt update  
