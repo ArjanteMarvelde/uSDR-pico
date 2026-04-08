@@ -88,8 +88,8 @@ run ubuntu from the Start menu
 - cd blink  
 - make  
 ### Some hints  
-In Ubuntu the windows C:\ is available under /mnt/c  
-Likewise, the Documents folder: /mnt/c/Users/<user>/Documents  
+In Ubuntu the windows C:\ is available under **/mnt/c**  
+Likewise, the Documents folder: **/mnt/c/Users/<user>/Documents**  
 Use "explorer.exe ." to open a windows explorer in the current directory  
   
 ## Building uSDR-pico:    
