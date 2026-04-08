@@ -94,13 +94,13 @@ Likewise, the Documents folder: **/mnt/c/Users/<user>/Documents**
 Use "explorer.exe ." to open a windows explorer in the current directory  
   
 ## Building uSDR-pico:    
-In ubuntu, create a folder **~/pico/uSDR-pico**.  
-Git clone the uSDR-pico code files into **~/pico/uSDR-pico**.  
+In ubuntu, git clone the uSDR-pico code files into **~/pico/**, "cd ~/pico; git clone https://github.com/ArjanteMarvelde/uSDR-pico".  
 Create the build folder: **~/pico/uSDR-pico/build**  
 Edit **~/pico/uSDR-pico/CMakeLists.txt** to have the correct environment parameter *PICO_SDK_PATH*, but it should also take it from the environment setting. In line with above installation this will be "~/pico/pico-sdk".  
+Now create the build environment, "cd ~/pico/uSDR-pico/build; cmake ..".  
 *Note* that every time you change something in **CMakeLists.txt** (like adding another source file to the build) you will have to clean the build folder and execute cmake once more: "cd ~/pico/uSDR-pico/build; rm -rf *; cmake ..".   
 
-Now you have initialized the make environment and by executing **make** in that same **build** folder, all SDK libraries and finally the Pi Pico loadable file **uSDR.uf2** will be created.  
+Now you have initialized the build environment and by executing **make** in the **build** folder, all SDK libraries and finally the Pi Pico loadable file **uSDR.uf2** will be created.  
 *Note that when environment errors are encountered, it may help to empty the build folder and re-issue the cmake command.*   
 Rebooting the Pico while the bootsel button is pressed will open a Windows Explorer window with the Pico shown as a Mass Storage Device (e.g. drive E:). Moving **uSDR.uf2** from the build to the Pico drive is as easy as dragging and dropping this file in windows explorer.  
   
