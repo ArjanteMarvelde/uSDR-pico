@@ -77,7 +77,7 @@ run ubuntu from the Start menu
 - nano .bashrc  
 add to the end: *export PICO_SDK_PATH=~/pico/pico-sdk*  
 (now the *CMakeLists.txt* file no longer needs to set this)  
-save and exit nano  
+- save file and exit nano  
 - exit  
 ### Test with blink example  
 run ubuntu from the Start menu  
