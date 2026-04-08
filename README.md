@@ -47,15 +47,15 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 ## Installing and using the SDK: 
 Forget about collecting all the tooling manually in Windows, and avoid going through the hassle of keeping all things in sync. Instead, use Ubuntu on WSL (Windows Subsystem for Linux) and use the command line interface to generate your build. You can still edit the source files in Windows e.g. with Notepad++.  
 ### Ubuntu on WSL 
-Open Windows Powershell as administrator. 
-- wsl --install  
-then restart windows,  
-if automatic Ubuntu installation fails open Powershell as administrator 
+Open Windows Powershell as administrator  
+- wsl --install   
+restart computer
+Open Windows Powershell as administrator  
 - wsl.exe --list --online  
-to see the list of distro's  
+(to see the list of distro's)  
 - wsl.exe --install [Distro]  
-I have used *Ubuntu-24.04*  
-close Powershell  
+(I have used *Ubuntu-24.04*)  
+exit Powershell
 run ubuntu from the Start menu  
 - sudo apt update  
 - sudo apt upgrade  
