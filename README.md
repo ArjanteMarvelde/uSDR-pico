@@ -86,33 +86,30 @@ run ubuntu from the Start menu
 - cd build  
 - cmake ..  
 - cd blink  
-- make  
+- make
+  
 ### Some hints  
 In Ubuntu the windows C:\ is available under **/mnt/c**  
 Likewise, the Documents folder: **/mnt/c/Users/<user>/Documents**  
 Use "explorer.exe ." to open a windows explorer in the current directory  
   
 ## Building uSDR-pico:    
-Create a folder **~/pico/uSDR-pico**.  
+In ubuntu, create a folder **~/pico/uSDR-pico**.  
 Git clone the uSDR-pico code files into **~/pico/uSDR-pico**.  
-Create the build folder: **$PICO/uSDR-pico/build**  
-Edit **CMakeLists.txt** to have the correct environment parameter *PICO_SDK_PATH*. In line with above installation this will be "~/pico/pico-sdk".  
-*Note* that every time you change something in **CMakeLists.txt** (like adding another source file to the build) you will have to clean the build folder and re-issue cmake.  
- 
-All building is using Ninja, which has to be done from a **VS Developer Command Prompt for Pico** (*DCP*) because it sets up the proper build environment. A shortcut to *DCP* is found in the Start menu under the Raspberry Pi Pico SDK folder, and it is best to copy a shortcut in a more convenient place. Then the *startup folder* property of the shortcut can be changed to for example **$PICO**.   
+Create the build folder: **~/pico/uSDR-pico/build**  
+Edit **~/pico/uSDR-pico/CMakeLists.txt** to have the correct environment parameter *PICO_SDK_PATH*, but it should also take it from the environment setting. In line with above installation this will be "~/pico/pico-sdk".  
+*Note* that every time you change something in **CMakeLists.txt** (like adding another source file to the build) you will have to clean the build folder and execute cmake once more: "cd ~/pico/uSDR-pico/build; rm -rf *; cmake ..".   
 
-In the *DCP* window, chdir to the **build** folder and execute: **cmake -G "Ninja" ..**   (do not forget the trailing dots, it points to the folder containing **CMakeLists.txt**).  
-
-Now you have initialized the make environment and by executing **Ninja** in that same **build** folder, all SDK libraries and finally the Pi Pico loadable file **uSDR.uf2** will be created.  
+Now you have initialized the make environment and by executing **make** in that same **build** folder, all SDK libraries and finally the Pi Pico loadable file **uSDR.uf2** will be created.  
 *Note that when environment errors are encountered, it may help to empty the build folder and re-issue the cmake command.*   
-Rebooting the Pico while the bootsel button is pressed will open a Windows Explorer window with the Pico shown as a Mass Storage Device (e.g. drive E:). Moving **uSDR.uf2** to the Pico is as easy as dragging and dropping this file into that MSD.  
+Rebooting the Pico while the bootsel button is pressed will open a Windows Explorer window with the Pico shown as a Mass Storage Device (e.g. drive E:). Moving **uSDR.uf2** from the build to the Pico drive is as easy as dragging and dropping this file in windows explorer.  
   
 ## Releases  
 Stable packages are archived in zip files. The source files in the root folder are newest and could be used to replace files from the zip archive. There are pre-built UF2 files for three display types, which could be tried. However, there are too many differnt types and addresses, so it is better to build a fresh one for your own implementation.   
 The PCB files have been made with Eagle 5.11, and can be modified or otherwise re-used when needed. The CAM files for each board are packaged in separate zips, these can be used as-is to order PCBs.  
 
 # Background
-The folder **$PICO/docs** also contains some manuals, of which the *C-SDK description*, the *RP2040 datasheet* and the *Pico Pinout* are absolute must-reads when you start writing software. Note that this folder is only created by the **ndabas** script, after manual installation you should find these on the Raspberry website.  
+The Raspberry website contains the manuals, of which the *C-SDK description*, the *RP2040 datasheet* and the *Pico Pinout* are absolute must-reads when you start writing software.    
 For calculating filters I have used the free software from [Iowa Hills](http://www.iowahills.com/8DownloadPage.html) (website has been down for a while, but files can be found using [Wayback Machine]( https://web.archive.org/web/20210819042054/http://www.iowahills.com/8DownloadPage.html))  
 I also used the online FIR filter calculator [T-Filter](http://t-filter.engineerjs.com/) 
 
