@@ -42,6 +42,7 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 - [ ] all SW to be tested on new v4.10 HW
 - [ ] add simple waterfall over the 7.8kHz FFT band, as tuning assist  
 - [ ] upgrade SDK and HW to the Pico 2 board
+- [ ] audio interface over USB  
  
 
 ## Installing and using the SDK: 
