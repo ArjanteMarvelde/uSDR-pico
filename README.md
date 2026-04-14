@@ -42,37 +42,75 @@ The display is a standard 16x2 LCD, but with an I2C interface. The display is co
 - [ ] all SW to be tested on new v4.10 HW
 - [ ] add simple waterfall over the 7.8kHz FFT band, as tuning assist  
 - [ ] upgrade SDK and HW to the Pico 2 board
+- [ ] audio interface over USB  
  
 
-## Installing and using the SDK for Windows: 
-For setting up the C/C++ build environment for Windows, you can follow the procedure as described in the Raspberry [Getting Started](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document. This document also refers to a [setup script](https://github.com/raspberrypi/pico-setup-windows). The link [Download the latest release] (https://github.com/raspberrypi/pico-setup-windows/releases/latest/download/pico-setup-windows-x64-standalone.exe) point to a Windows installer for 64-bit processors. I still find VS Code a disaster and use Notepad++ as text editor and the Developer Command Prompt to start cmake and make manually.  
-In case this does not work, please revert to the instructions in the getting started document.  
+## Installing and using the SDK: 
+Forget about collecting all the tooling manually in Windows, and avoid going through the hassle of keeping all things in sync. Instead, use Ubuntu on WSL (Windows Subsystem for Linux) and use the command line interface to generate your build. You can still edit the source files in Windows e.g. with Notepad++.  
+### Ubuntu on WSL 
+Make sure that virtualization is enabled in BIOS  
+open Powershell as administrator  
+- wsl --install
 
-### Windows installer.  
-Doing it manually, first download the latest release installer, for Windows 10 on a 64 bit PC. During the installation process target directory is asked, I use a directory called Pico in my Documents folder (call it **$PICO**) and install the toolchain in an SDKv1.5.1 subfolder. Everything will end up there, except VS Code, which I don't use anyway.   
+restart computer  
+open Powershell as administrator  
+- wsl.exe --list --online  
+(to see the list of distro's)  
+- wsl.exe --install [Distro]  
+(I have used *Ubuntu-24.04*)
+
+exit Powershell  
+run ubuntu from the Start menu  
+- sudo apt update  
+- sudo apt upgrade  
+- sudo apt install cmake gcc-arm-none-eabi build-essential libnewlib-arm-none-eabi git  
+### Get SDK and other stuff 
+run ubuntu from the Start menu  
+- cd ~  
+- mkdir pico  
+- cd pico  
+- git clone -b master https://github.com/raspberrypi/pico-sdk.git  
+- cd pico-sdk  
+- git submodule update --init   
+- cd ~/pico  
+- git clone -b master https://github.com/raspberrypi/pico-examples.git  
+- cd ~  
+- nano .bashrc  
+add to the end: *export PICO_SDK_PATH=~/pico/pico-sdk*  
+(now the *CMakeLists.txt* file no longer needs to set this)  
+- save file and exit nano  
+- exit  
+### Test with blink example  
+run ubuntu from the Start menu  
+- cd ~/pico/pico-examples  
+- mkdir build  
+- cd build  
+- cmake ..  
+- cd blink  
+- make
   
+### Some hints  
+In Ubuntu the windows C:\ is available under **/mnt/c**  
+Likewise, the Documents folder: **/mnt/c/Users/<user>/Documents**  
+Use "explorer.exe ." to open a windows explorer in the current directory  
   
 ## Building uSDR-pico:    
-Create a folder **$PICO**.  
-Clone/copy the uSDR-pico code files into **$PICO/uSDR-pico**.  
-Create the build folder: **$PICO/uSDR-pico/build**  
-Edit **CMakeLists.txt** to have the correct environment parameter *PICO_SDK_PATH*. Normally this will be "C:/Program Files/Raspberry Pi/Pico SDK v1.5.1/pico-sdk".  
-*Note* that every time you change something in **CMakeLists.txt** (like adding another source file to the build) you will have to clean the build folder and re-issue cmake.  
- 
-All building is using Ninja, which has to be done from a **VS Developer Command Prompt for Pico** (*DCP*) because it sets up the proper build environment. A shortcut to *DCP* is found in the Start menu under the Raspberry Pi Pico SDK folder, and it is best to copy a shortcut in a more convenient place. Then the *startup folder* property of the shortcut can be changed to for example **$PICO**.   
+In ubuntu, git clone the uSDR-pico files: "cd ~~/pico; git clone https://github.com/ArjanteMarvelde/uSDR-pico".  
+Create the build folder: "mkdir ~~/pico/uSDR-pico/build".  
+Edit **~/pico/uSDR-pico/CMakeLists.txt** to have the correct environment parameter *PICO_SDK_PATH*, but it should also take it from the environment setting. In line with above installation this will be "~/pico/pico-sdk".  
+Now create the build environment, "cd ~/pico/uSDR-pico/build; cmake ..".  
+*Note* that every time you change something in **CMakeLists.txt** (like adding another source file to the build) you will have to clean the build folder and execute cmake once more: "cd ~/pico/uSDR-pico/build; rm -rf *; cmake ..".   
 
-In the *DCP* window, chdir to the **build** folder and execute: **cmake -G "Ninja" ..**   (do not forget the trailing dots, it points to the folder containing **CMakeLists.txt**).  
-
-Now you have initialized the make environment and by executing **Ninja** in that same **build** folder, all SDK libraries and finally the Pi Pico loadable file **uSDR.uf2** will be created.  
+Now you have initialized the build environment and by executing **make** in the **build** folder, all SDK libraries and finally the Pi Pico loadable file **uSDR.uf2** will be created.  
 *Note that when environment errors are encountered, it may help to empty the build folder and re-issue the cmake command.*   
-Rebooting the Pico while the bootsel button is pressed will open a Windows Explorer window with the Pico shown as a Mass Storage Device (e.g. drive E:). Moving **uSDR.uf2** to the Pico is as easy as dragging and dropping this file into that MSD.  
+Rebooting the Pico while the bootsel button is pressed will open a Windows Explorer window with the Pico shown as a Mass Storage Device (e.g. drive E:). Moving **uSDR.uf2** from the build to the Pico drive is as easy as dragging and dropping this file in windows explorer.  
   
 ## Releases  
 Stable packages are archived in zip files. The source files in the root folder are newest and could be used to replace files from the zip archive. There are pre-built UF2 files for three display types, which could be tried. However, there are too many differnt types and addresses, so it is better to build a fresh one for your own implementation.   
 The PCB files have been made with Eagle 5.11, and can be modified or otherwise re-used when needed. The CAM files for each board are packaged in separate zips, these can be used as-is to order PCBs.  
 
 # Background
-The folder **$PICO/docs** also contains some manuals, of which the *C-SDK description*, the *RP2040 datasheet* and the *Pico Pinout* are absolute must-reads when you start writing software. Note that this folder is only created by the **ndabas** script, after manual installation you should find these on the Raspberry website.  
+The Raspberry website contains the manuals, of which the *C-SDK description*, the *RP2040 datasheet* and the *Pico Pinout* are absolute must-reads when you start writing software.    
 For calculating filters I have used the free software from [Iowa Hills](http://www.iowahills.com/8DownloadPage.html) (website has been down for a while, but files can be found using [Wayback Machine]( https://web.archive.org/web/20210819042054/http://www.iowahills.com/8DownloadPage.html))  
 I also used the online FIR filter calculator [T-Filter](http://t-filter.engineerjs.com/) 
 
