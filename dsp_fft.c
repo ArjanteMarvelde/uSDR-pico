@@ -123,8 +123,8 @@ volatile uint32_t dsp_tickx  = 0;											// Load indicator DSP loop
 void __not_in_flash_func(dsp_shift)(void) 
 {
 	int i;
-	uint16_t x;
-	
+	int16_t x;
+
 	for (i=0; i<FFT_SIZE; i+=4)
 	{
 		x = XI_buf[i+1];
@@ -159,6 +159,25 @@ void __not_in_flash_func(dsp_shift)(void)
 #define DSP_PASS_LSB	-1
 #define DSP_PASS_USB	 1
 #define DSP_PASS_DSB	 0
+
+// Q15 representation of coefficients
+static const int16_t coffs[5] = {
+	(int16_t)(0.067 * (1 << 15) + 0.5), // 0.067
+	(int16_t)(0.25 * (1 << 15) + 0.5),	// 0.25
+	(int16_t)(0.5 * (1 << 15) + 0.5),	// 0.5
+	(int16_t)(0.75 * (1 << 15) + 0.5),	// 0.75
+	(int16_t)(0.933 * (1 << 15) + 0.5), // 0.933
+};
+
+static inline int16_t mul_Q15(int16_t a, int16_t b)
+{
+	int32_t temp;
+
+	temp = (int32_t)a * (int32_t)b; // Q30
+	temp += (1 << 14);				// Rounding
+	return (int16_t)(temp >> 15);	// Back to Q15
+}
+
 void __not_in_flash_func(dsp_bandpass)(int lowbin, int highbin, int sidebands)
 {
 	int i, lo1, lo2, hi1, hi2;
@@ -186,17 +205,17 @@ void __not_in_flash_func(dsp_bandpass)(int lowbin, int highbin, int sidebands)
 	else 																	// USB or DSB: apply filter curve
 	{
 		i=lo1;
-		XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i++;
-		XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i++;
-		XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i++;
-		XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i++;
-		XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933; 
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[0]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[0]); i++;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[1]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[1]); i++;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[2]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[2]); i++;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[3]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[3]); i++;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[4]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[4]);
 		i=lo2;
-		XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i--;
-		XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i--;
-		XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i--;
-		XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i--;
-		XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[0]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[0]); i--;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[1]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[1]); i--;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[2]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[2]); i--;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[3]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[3]); i--;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[4]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[4]);
 	}
 	for (i=lo2+1; i<hi1; i++)												// Block unused negative freq bins
 		{ XI_buf[i] = 0; XQ_buf[i] = 0; }
@@ -209,17 +228,17 @@ void __not_in_flash_func(dsp_bandpass)(int lowbin, int highbin, int sidebands)
 	else																	// LSB or DSB: apply filter curve
 	{
 		i=hi1;
-		XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i++;
-		XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i++;
-		XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i++;
-		XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i++;
-		XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933; 
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[0]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[0]); i++;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[1]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[1]); i++;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[2]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[2]); i++;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[3]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[3]); i++;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[4]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[4]);
 		i=hi2;
-		XI_buf[i] = XI_buf[i]*0.067; XQ_buf[i] = XQ_buf[i]*0.067; i--;
-		XI_buf[i] = XI_buf[i]*0.250; XQ_buf[i] = XQ_buf[i]*0.250; i--;
-		XI_buf[i] = XI_buf[i]*0.500; XQ_buf[i] = XQ_buf[i]*0.500; i--;
-		XI_buf[i] = XI_buf[i]*0.750; XQ_buf[i] = XQ_buf[i]*0.750; i--;
-		XI_buf[i] = XI_buf[i]*0.933; XQ_buf[i] = XQ_buf[i]*0.933;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[0]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[0]); i--;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[1]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[1]); i--;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[2]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[2]); i--;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[3]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[3]); i--;
+		XI_buf[i] = mul_Q15(XI_buf[i], coffs[4]); XQ_buf[i] = mul_Q15(XQ_buf[i], coffs[4]);
 	}
 	for (i=hi2+1; i<FFT_SIZE; i++) 												// Block from high filter side
 		{ XI_buf[i] = 0; XQ_buf[i] = 0; }
